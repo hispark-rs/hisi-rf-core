@@ -579,6 +579,11 @@ pub struct RadioRunner<B, const EVENTS: usize> {
 
 impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
     /// Process at most one command and one bounded background-work batch.
+    ///
+    /// A `true` result means another batch may be useful immediately; it does
+    /// not grant the caller permission to monopolize a cooperative executor.
+    /// A thread-based runner must yield or otherwise provide a scheduling point
+    /// between calls.
     pub fn run_once(&mut self) -> bool {
         let mut did_work = false;
         if let Ok(command) = self.state.shared.commands.try_receive() {
