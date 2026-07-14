@@ -331,6 +331,15 @@ pub trait WifiBackend {
 
     /// Disconnect the station interface.
     fn disconnect(&mut self, config: &WifiConfig) -> Result<(), BackendError>;
+
+    /// Advance bounded background work owned by the radio runner.
+    ///
+    /// Push-only backends may keep the default implementation. Host-side
+    /// protocol engines use this seam for event-loop deadlines and queued RX;
+    /// it must not invoke application callbacks.
+    fn poll(&mut self) -> Result<bool, BackendError> {
+        Ok(false)
+    }
 }
 
 /// Caller-provided chip resources.
@@ -401,6 +410,7 @@ impl<B, D, const EVENTS: usize> RadioController<B, D, EVENTS> {
                 backend: self.resources.backend,
                 config: self.config.wifi,
                 state: self.state,
+                last_poll_error: None,
             },
         }
     }
@@ -564,19 +574,39 @@ pub struct RadioRunner<B, const EVENTS: usize> {
     backend: B,
     config: WifiConfig,
     state: &'static RadioState<EVENTS>,
+    last_poll_error: Option<BackendError>,
 }
 
 impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
-    /// Process one pending command, returning whether work was available.
+    /// Process at most one command and one bounded background-work batch.
     pub fn run_once(&mut self) -> bool {
-        let Ok(command) = self.state.shared.commands.try_receive() else {
-            return false;
-        };
-        self.process_command(command);
-        true
+        let mut did_work = false;
+        if let Ok(command) = self.state.shared.commands.try_receive() {
+            self.process_command(command);
+            did_work = true;
+        }
+        match self.backend.poll() {
+            Ok(background_work) => {
+                self.last_poll_error = None;
+                did_work || background_work
+            }
+            Err(error) => {
+                if self.last_poll_error != Some(error) {
+                    self.state.shared.publish_event(WifiEvent::Failed(error));
+                    self.last_poll_error = Some(error);
+                    true
+                } else {
+                    did_work
+                }
+            }
+        }
     }
 
-    /// Run forever, sleeping inside the channel future while idle.
+    /// Run forever for command-driven backends.
+    ///
+    /// Backends with timer- or RX-driven [`WifiBackend::poll`] work must call
+    /// [`Self::run_once`] from their platform runner so its wait primitive can
+    /// cover both command and backend wake sources.
     pub async fn run(mut self) -> ! {
         loop {
             let command = self.state.shared.commands.receive().await;
@@ -722,6 +752,8 @@ mod tests {
     #[derive(Default)]
     struct MockBackend {
         calls: u8,
+        poll_work: bool,
+        poll_error: Option<BackendError>,
     }
 
     impl WifiBackend for MockBackend {
@@ -761,6 +793,14 @@ mod tests {
         fn disconnect(&mut self, _: &WifiConfig) -> Result<(), BackendError> {
             self.calls += 1;
             Ok(())
+        }
+
+        fn poll(&mut self) -> Result<bool, BackendError> {
+            if let Some(error) = self.poll_error {
+                Err(error)
+            } else {
+                Ok(core::mem::take(&mut self.poll_work))
+            }
         }
     }
 
@@ -843,6 +883,65 @@ mod tests {
                 dropped: 1,
             }
         );
+    }
+
+    #[test]
+    fn runner_advances_background_work_without_a_command() {
+        let state = Box::leak(Box::new(RadioState::<2>::new()));
+        let radio = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: MockBackend {
+                    poll_work: true,
+                    ..MockBackend::default()
+                },
+                device: (),
+            },
+            state,
+        )
+        .unwrap();
+        let mut runner = radio.split().runner;
+
+        assert!(runner.run_once());
+        assert!(!runner.run_once());
+    }
+
+    #[test]
+    fn repeated_background_error_publishes_one_event() {
+        let state = Box::leak(Box::new(RadioState::<2>::new()));
+        let error = BackendError {
+            class: BackendErrorClass::Other,
+            code: 0x55,
+        };
+        let radio = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: MockBackend {
+                    poll_error: Some(error),
+                    ..MockBackend::default()
+                },
+                device: (),
+            },
+            state,
+        )
+        .unwrap();
+        let RadioParts {
+            mut wifi,
+            mut runner,
+        } = radio.split();
+
+        assert!(runner.run_once());
+        assert!(!runner.run_once());
+        assert_eq!(
+            wifi.controller.event_diagnostics(),
+            EventDiagnostics {
+                capacity: 2,
+                pending: 1,
+                dropped: 0,
+            }
+        );
+        let mut event = core::pin::pin!(wifi.controller.next_event());
+        assert_eq!(poll(event.as_mut()), Poll::Ready(WifiEvent::Failed(error)));
     }
 
     #[test]
