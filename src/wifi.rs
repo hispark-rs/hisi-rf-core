@@ -20,12 +20,15 @@ pub struct RadioConfig {
 pub struct WifiConfig {
     /// Maximum time a backend may spend initializing.
     pub initialize_timeout_ms: u32,
+    /// Maximum time to wait for a disconnect event.
+    pub disconnect_timeout_ms: u32,
 }
 
 impl Default for WifiConfig {
     fn default() -> Self {
         Self {
             initialize_timeout_ms: 30_000,
+            disconnect_timeout_ms: 10_000,
         }
     }
 }
@@ -182,12 +185,17 @@ pub struct StationConfig {
     pub channel: u8,
     /// WPA2-Personal passphrase.
     pub passphrase: Passphrase,
+    timeout_ms: u32,
 }
 
 impl StationConfig {
     /// Select a WPA2-Personal scan result and take ownership of its passphrase.
-    pub fn wpa2_personal(result: &ScanResult, passphrase: Passphrase) -> Option<Self> {
-        if result.security != Security::Wpa2Personal {
+    pub fn wpa2_personal(
+        result: &ScanResult,
+        passphrase: Passphrase,
+        timeout_ms: u32,
+    ) -> Option<Self> {
+        if result.security != Security::Wpa2Personal || timeout_ms == 0 {
             return None;
         }
         Some(Self {
@@ -195,7 +203,13 @@ impl StationConfig {
             bssid: result.bssid,
             channel: result.channel,
             passphrase,
+            timeout_ms,
         })
+    }
+
+    /// Maximum time to wait for association and authorization.
+    pub const fn timeout_ms(&self) -> u32 {
+        self.timeout_ms
     }
 }
 
@@ -276,7 +290,7 @@ pub trait WifiBackend {
     fn connect(&mut self, config: &StationConfig) -> Result<ConnectionInfo, BackendError>;
 
     /// Disconnect the station interface.
-    fn disconnect(&mut self) -> Result<(), BackendError>;
+    fn disconnect(&mut self, config: &WifiConfig) -> Result<(), BackendError>;
 }
 
 /// Caller-provided chip resources.
@@ -561,7 +575,7 @@ impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
                 CompletionKind::Connect(result)
             }
             CommandKind::Disconnect => {
-                let result = self.backend.disconnect();
+                let result = self.backend.disconnect(&self.config);
                 self.publish_result(result, WifiEvent::Disconnected { reason: 0 });
                 CompletionKind::Disconnect(result)
             }
@@ -704,7 +718,7 @@ mod tests {
             })
         }
 
-        fn disconnect(&mut self) -> Result<(), BackendError> {
+        fn disconnect(&mut self, _: &WifiConfig) -> Result<(), BackendError> {
             self.calls += 1;
             Ok(())
         }
