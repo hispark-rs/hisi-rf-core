@@ -113,6 +113,11 @@ pub enum Security {
     Wpa2Personal,
     /// WPA3-Personal with SAE and mandatory PMF.
     Wpa3Personal,
+    /// WPA2/WPA3-Personal transition BSS advertising both PSK and SAE.
+    ///
+    /// Applications must explicitly choose WPA2 or WPA3 when constructing the
+    /// station configuration; discovery never silently downgrades the link.
+    Wpa2Wpa3PersonalTransition,
     /// A protected mode not yet represented by this public API.
     OtherProtected,
 }
@@ -206,7 +211,11 @@ impl StationConfig {
         passphrase: Passphrase,
         timeout_ms: u32,
     ) -> Option<Self> {
-        if result.security != Security::Wpa2Personal || timeout_ms == 0 {
+        if !matches!(
+            result.security,
+            Security::Wpa2Personal | Security::Wpa2Wpa3PersonalTransition
+        ) || timeout_ms == 0
+        {
             return None;
         }
         Some(Self {
@@ -229,7 +238,11 @@ impl StationConfig {
         sae_pwe: SaePwe,
         timeout_ms: u32,
     ) -> Option<Self> {
-        if result.security != Security::Wpa3Personal || timeout_ms == 0 {
+        if !matches!(
+            result.security,
+            Security::Wpa3Personal | Security::Wpa2Wpa3PersonalTransition
+        ) || timeout_ms == 0
+        {
             return None;
         }
         Some(Self {
@@ -1013,6 +1026,40 @@ mod tests {
         assert_eq!(
             config.security().management_frame_protection(),
             ManagementFrameProtection::Required
+        );
+    }
+
+    #[test]
+    fn transition_scan_requires_an_explicit_personal_mode_choice() {
+        let result = ScanResult {
+            ssid: Ssid::try_from_bytes(b"transition-ap").unwrap(),
+            bssid: [1, 2, 3, 4, 5, 6],
+            frequency_mhz: 5180,
+            rssi_dbm: -38,
+            security: Security::Wpa2Wpa3PersonalTransition,
+            channel: 36,
+        };
+
+        let wpa2 = StationConfig::wpa2_personal(
+            &result,
+            Passphrase::try_from_ascii(b"testtest").unwrap(),
+            10_000,
+        )
+        .unwrap();
+        assert_eq!(wpa2.security(), PersonalSecurity::Wpa2);
+
+        let wpa3 = StationConfig::wpa3_personal(
+            &result,
+            Passphrase::try_from_ascii(b"testtest").unwrap(),
+            SaePwe::Both,
+            10_000,
+        )
+        .unwrap();
+        assert_eq!(
+            wpa3.security(),
+            PersonalSecurity::Wpa3 {
+                sae_pwe: SaePwe::Both
+            }
         );
     }
 }

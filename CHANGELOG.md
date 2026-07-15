@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Typed WPA3-Personal station configuration with mandatory PMF and explicit SAE
   password-element policy.
+- Explicit WPA2/WPA3-Personal transition scan classification; callers choose
+  PSK or SAE instead of discovery silently downgrading to WPA2.
 
 ## [0.1.0-alpha.1] - 2026-07-14
 
