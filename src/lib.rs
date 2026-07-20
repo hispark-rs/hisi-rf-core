@@ -1,5 +1,9 @@
 //! Chip-neutral radio control and L2 data-plane contracts.
 //!
+//! This crate owns the portable controller, runner, configuration, event, and
+//! L2-device contracts. Applications normally depend on the chip-selecting
+//! `hisi-rf` facade instead of naming this implementation crate directly.
+//!
 //! [`init`] claims caller-provided static state and returns an exclusive
 //! [`RadioController`]. Splitting it yields a [`WifiController`], a
 //! [`WifiDevice`], and the mandatory [`RadioRunner`]. Only the runner calls the

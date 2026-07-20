@@ -1,12 +1,12 @@
 [package]
-name = "hisi-rf"
+name = "hisi-rf-core"
 version = "0.1.0-alpha.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["sanchuanhehe"]
 license = "MIT"
 description = "Chip-neutral async radio controller contracts for HiSilicon embedded Rust"
-repository = "https://github.com/hispark-rs/hisi-rf"
+repository = "https://github.com/hispark-rs/hisi-rf-core"
 keywords = ["embedded", "no-std", "wifi", "radio", "hisilicon"]
 categories = ["embedded", "no-std", "network-programming"]
 

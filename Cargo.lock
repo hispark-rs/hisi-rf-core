@@ -97,7 +97,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "hisi-rf"
+name = "hisi-rf-core"
 version = "0.1.0-alpha.1"
 dependencies = [
  "critical-section",
