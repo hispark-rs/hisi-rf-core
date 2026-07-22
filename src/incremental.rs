@@ -19,7 +19,9 @@ pub use command::{
     CommandArbiter, CommandArbiterAction, CommandArbiterError, CommandSequence, PendingCommand,
     SubmitError,
 };
-pub use driver::{IncrementalBackendDriver, IncrementalDriverError, IncrementalDriverEvent};
+pub use driver::{
+    IncrementalBackendDriver, IncrementalDriverError, IncrementalDriverEvent, IncrementalWaitIntent,
+};
 pub use facade::{IncrementalRadioParts, IncrementalRadioRunner, IncrementalRadioRunnerError};
 pub use runner::{
     CancelDirective, FairWakeSelector, IncrementalRunnerState, RunnerStateError, RunnerStep,

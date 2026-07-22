@@ -5,8 +5,8 @@ use crate::{
 
 use super::{
     CommandArbiterError, CommandSequence, IncrementalBackendDriver, IncrementalCompletion,
-    IncrementalDriverError, IncrementalDriverEvent, IncrementalRequest, IncrementalWifiBackend,
-    SubmitError, WaitSet, WorkBudget,
+    IncrementalDriverError, IncrementalDriverEvent, IncrementalRequest, IncrementalWaitIntent,
+    IncrementalWifiBackend, SubmitError, WaitSet, WorkBudget,
 };
 
 // A runner-local cancellation has no chip/backend status code to preserve.
@@ -143,6 +143,27 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
     /// Monotonic deadline currently requested by the backend.
     pub fn next_deadline_us(&self) -> Option<u64> {
         self.driver.next_deadline_us()
+    }
+
+    /// Snapshot immediate work, wake subscriptions, and the next deadline.
+    ///
+    /// The command source is included only while the bounded driver can retain
+    /// another request. A queued command makes the intent immediately runnable.
+    pub fn wait_intent(&self) -> IncrementalWaitIntent {
+        let intent = self.driver.wait_intent();
+        if self.driver.can_submit() {
+            intent.with_command(!self.state.shared.commands.is_empty())
+        } else {
+            intent
+        }
+    }
+
+    /// Wait until the controller command channel is non-empty without consuming it.
+    ///
+    /// A platform adapter should keep at most one such future outstanding and
+    /// only poll it when [`Self::wait_intent`] contains [`WaitSet::COMMAND`].
+    pub async fn wait_for_command(&self) {
+        self.state.shared.commands.ready_to_receive().await;
     }
 
     /// Borrow the chip backend for platform wake registration and diagnostics.
@@ -409,13 +430,23 @@ mod tests {
             mut runner,
         } = radio.split_incremental(budget());
 
+        let idle = runner.wait_intent();
+        assert_eq!(idle.sources(), WaitSet::COMMAND);
+        assert_eq!(idle.deadline_us(), None);
+        assert!(!idle.run_immediately());
+
         {
             let mut initialize = core::pin::pin!(wifi.controller.initialize());
             assert!(poll(initialize.as_mut()).is_pending());
+            assert!(runner.wait_intent().run_immediately());
             assert!(matches!(
                 runner.run_once(WaitSet::empty()).unwrap(),
                 IncrementalDriverEvent::Started { .. }
             ));
+            assert_eq!(
+                runner.wait_intent().sources(),
+                WaitSet::BACKEND.union(WaitSet::COMMAND)
+            );
             assert!(matches!(
                 runner.run_once(WaitSet::BACKEND).unwrap(),
                 IncrementalDriverEvent::Completed {
@@ -529,16 +560,25 @@ mod tests {
         let mut third = core::pin::pin!(wifi.controller.disconnect());
         assert!(poll(third.as_mut()).is_pending());
 
+        let backpressured = runner.wait_intent();
+        assert_eq!(backpressured.sources(), WaitSet::BACKEND);
+        assert!(!backpressured.sources().contains(WaitSet::COMMAND));
+        assert!(!backpressured.run_immediately());
+
         // The third command remains in the facade channel until the pending
         // second command has started; it is not rejected as over-capacity.
         assert!(matches!(
             runner.run_once(WaitSet::BACKEND).unwrap(),
             IncrementalDriverEvent::Cancelled { .. }
         ));
+        assert!(runner.wait_intent().run_immediately());
+        assert!(!runner.wait_intent().sources().contains(WaitSet::COMMAND));
         assert!(matches!(
             runner.run_once(WaitSet::empty()).unwrap(),
             IncrementalDriverEvent::Started { .. }
         ));
+        assert!(runner.wait_intent().sources().contains(WaitSet::COMMAND));
+        assert!(runner.wait_intent().run_immediately());
         assert!(matches!(
             runner.run_once(WaitSet::empty()).unwrap(),
             IncrementalDriverEvent::CancelRequested { .. }

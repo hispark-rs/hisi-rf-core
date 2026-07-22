@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added an atomic incremental wait-intent snapshot and a non-consuming command
+  wait future so platform adapters can compose command, backend, L2, and timer
+  wakes without busy polling or guessing the backend deadline.
+
 ## [0.1.0-alpha.9] - 2026-07-23
 
 ### Added

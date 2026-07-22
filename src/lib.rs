@@ -26,7 +26,7 @@ pub use incremental::{
     CancelDirective, CancelOutcome, CommandArbiter, CommandArbiterAction, CommandArbiterError,
     CommandSequence, FairWakeSelector, IncrementalBackendDriver, IncrementalCompletion,
     IncrementalDriverError, IncrementalDriverEvent, IncrementalRadioParts, IncrementalRadioRunner,
-    IncrementalRadioRunnerError, IncrementalRequest, IncrementalRunnerState,
+    IncrementalRadioRunnerError, IncrementalRequest, IncrementalRunnerState, IncrementalWaitIntent,
     IncrementalWifiBackend, OperationId, OperationLifecycle, OperationStateError, OperationTracker,
     PendingCommand, PollDisposition, RunnerStateError, RunnerStep, RunnerTransition, SubmitError,
     WaitSet, WakeReason, WorkBudget, WorkReport,

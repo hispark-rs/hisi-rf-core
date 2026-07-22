@@ -103,6 +103,38 @@ pub enum IncrementalDriverEvent {
     },
 }
 
+/// Atomic snapshot of the next platform wait required by the incremental driver.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IncrementalWaitIntent {
+    sources: WaitSet,
+    deadline_us: Option<u64>,
+    run_immediately: bool,
+}
+
+impl IncrementalWaitIntent {
+    /// Wake sources that should be composed into the next platform wait.
+    pub const fn sources(self) -> WaitSet {
+        self.sources
+    }
+
+    /// Monotonic backend deadline to arm, when one exists.
+    pub const fn deadline_us(self) -> Option<u64> {
+        self.deadline_us
+    }
+
+    /// Whether another bounded [`IncrementalBackendDriver::drive_once`] call can
+    /// make progress without waiting for an external source.
+    pub const fn run_immediately(self) -> bool {
+        self.run_immediately
+    }
+
+    pub(super) const fn with_command(mut self, ready: bool) -> Self {
+        self.sources = self.sources.union(WaitSet::COMMAND);
+        self.run_immediately |= ready;
+        self
+    }
+}
+
 /// Executable, deterministic composition of the A5B incremental contracts.
 ///
 /// This driver deliberately does not own an async executor or the default
@@ -141,6 +173,31 @@ impl<B: IncrementalWifiBackend> IncrementalBackendDriver<B> {
     /// Whether the bounded command arbiter can retain one more request.
     pub const fn can_submit(&self) -> bool {
         self.arbiter.can_submit()
+    }
+
+    /// Snapshot the backend-side wait contract after the latest transition.
+    ///
+    /// A reported deadline always subscribes the timer source even if the last
+    /// backend report omitted it, preventing a timeout from becoming dependent
+    /// on unrelated traffic.
+    pub fn wait_intent(&self) -> IncrementalWaitIntent {
+        let deadline_us = self.next_deadline_us();
+        let mut sources = self.runner.wait_for();
+        if deadline_us.is_some() {
+            sources = sources.union(WaitSet::TIMER);
+        }
+        let run_immediately = match self.arbiter.action() {
+            CommandArbiterAction::Idle => false,
+            CommandArbiterAction::WaitActive(_) => sources.is_empty(),
+            CommandArbiterAction::StartPending(_)
+            | CommandArbiterAction::Starting(_)
+            | CommandArbiterAction::CancelActive(_) => true,
+        };
+        IncrementalWaitIntent {
+            sources,
+            deadline_us,
+            run_immediately,
+        }
     }
 
     /// Execute at most one start, cancellation, or bounded backend poll.
@@ -440,6 +497,35 @@ mod tests {
 
     fn empty_scan_output() -> [ScanResult; 1] {
         [ScanResult::empty(); 1]
+    }
+
+    #[test]
+    fn wait_intent_composes_immediate_work_sources_and_deadline() {
+        let backend = FakeBackend::complete(IncrementalCompletion::Initialized);
+        let mut driver = IncrementalBackendDriver::new(backend, budget());
+        let mut output = empty_scan_output();
+
+        assert_eq!(
+            driver.wait_intent(),
+            IncrementalWaitIntent {
+                sources: WaitSet::empty(),
+                deadline_us: None,
+                run_immediately: false,
+            }
+        );
+        driver
+            .submit(
+                command_sequence(1),
+                IncrementalRequest::Initialize(WifiConfig::default()),
+            )
+            .unwrap();
+        assert!(driver.wait_intent().run_immediately());
+
+        let _ = driver.drive_once(WaitSet::empty(), &mut output).unwrap();
+        let intent = driver.wait_intent();
+        assert_eq!(intent.deadline_us(), Some(42));
+        assert_eq!(intent.sources(), WaitSet::BACKEND.union(WaitSet::TIMER));
+        assert!(!intent.run_immediately());
     }
 
     #[test]
