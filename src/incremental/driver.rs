@@ -105,11 +105,12 @@ pub enum IncrementalDriverEvent {
 
 /// Executable, deterministic composition of the A5B incremental contracts.
 ///
-/// This driver deliberately does not own an async executor or the current
-/// [`crate::RadioRunner`]. A future facade adapter feeds commands and wake bits
-/// into [`Self::drive_once`]. Keeping that boundary explicit lets host tests
-/// close cancellation, stale-generation, error, and bounded-work semantics
-/// before any WS63 backend becomes incremental.
+/// This driver deliberately does not own an async executor or the default
+/// [`crate::RadioRunner`]. The opt-in [`crate::IncrementalRadioRunner`] facade
+/// feeds commands and platform-derived wake bits into [`Self::drive_once`].
+/// Keeping that boundary explicit lets host tests close cancellation,
+/// stale-generation, error, and bounded-work semantics before any WS63 backend
+/// becomes incremental.
 pub struct IncrementalBackendDriver<B> {
     backend: B,
     arbiter: CommandArbiter<IncrementalRequest>,
@@ -135,6 +136,11 @@ impl<B: IncrementalWifiBackend> IncrementalBackendDriver<B> {
         request: IncrementalRequest,
     ) -> Result<(), SubmitError<IncrementalRequest>> {
         self.arbiter.submit(PendingCommand::new(sequence, request))
+    }
+
+    /// Whether the bounded command arbiter can retain one more request.
+    pub const fn can_submit(&self) -> bool {
+        self.arbiter.can_submit()
     }
 
     /// Execute at most one start, cancellation, or bounded backend poll.

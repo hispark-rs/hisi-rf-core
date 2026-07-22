@@ -120,6 +120,14 @@ impl<C> CommandArbiter<C> {
         }
     }
 
+    /// Whether the one-entry pending command slot is available.
+    ///
+    /// Facade adapters use this as backpressure before removing another
+    /// command from their own bounded channel.
+    pub const fn can_submit(&self) -> bool {
+        self.pending.is_none()
+    }
+
     /// Queue one command without replacing an existing pending command.
     pub fn submit(&mut self, command: PendingCommand<C>) -> Result<(), SubmitError<C>> {
         if self.pending.is_some() {

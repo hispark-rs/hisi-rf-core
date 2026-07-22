@@ -12,6 +12,7 @@ use crate::{
 
 mod command;
 mod driver;
+mod facade;
 mod runner;
 
 pub use command::{
@@ -19,6 +20,7 @@ pub use command::{
     SubmitError,
 };
 pub use driver::{IncrementalBackendDriver, IncrementalDriverError, IncrementalDriverEvent};
+pub use facade::{IncrementalRadioParts, IncrementalRadioRunner, IncrementalRadioRunnerError};
 pub use runner::{
     CancelDirective, FairWakeSelector, IncrementalRunnerState, RunnerStateError, RunnerStep,
     RunnerTransition,

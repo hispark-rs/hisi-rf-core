@@ -440,7 +440,7 @@ pub struct RadioResources<B, D> {
 
 /// Static storage for one radio controller and its bounded event queue.
 pub struct RadioState<const EVENTS: usize> {
-    shared: SharedState<EVENTS>,
+    pub(crate) shared: SharedState<EVENTS>,
 }
 
 impl<const EVENTS: usize> RadioState<EVENTS> {
@@ -484,8 +484,28 @@ pub fn init<B, D, const EVENTS: usize>(
 impl<B, D, const EVENTS: usize> RadioController<B, D, EVENTS> {
     /// Split exclusive ownership into Wi-Fi control/data planes and the runner.
     pub fn split(self) -> RadioParts<B, D, EVENTS> {
+        let (wifi, backend, config, state) = self.split_components();
         RadioParts {
-            wifi: WifiParts {
+            wifi,
+            runner: RadioRunner {
+                backend,
+                config,
+                state,
+                last_poll_error: None,
+            },
+        }
+    }
+
+    pub(crate) fn split_components(
+        self,
+    ) -> (
+        WifiParts<D, EVENTS>,
+        B,
+        WifiConfig,
+        &'static RadioState<EVENTS>,
+    ) {
+        (
+            WifiParts {
                 controller: WifiController {
                     state: self.state,
                     next_sequence: 0,
@@ -494,13 +514,10 @@ impl<B, D, const EVENTS: usize> RadioController<B, D, EVENTS> {
                     inner: self.resources.device,
                 },
             },
-            runner: RadioRunner {
-                backend: self.resources.backend,
-                config: self.config.wifi,
-                state: self.state,
-                last_poll_error: None,
-            },
-        }
+            self.resources.backend,
+            self.config.wifi,
+            self.state,
+        )
     }
 }
 
@@ -548,6 +565,8 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
             }
             return match completion.kind {
                 CompletionKind::Initialize(result) => result.map_err(Error::Backend),
+                #[cfg(feature = "incremental-backend-experiment")]
+                CompletionKind::Protocol => Err(Error::Protocol),
                 _ => Err(Error::Protocol),
             };
         }
@@ -583,6 +602,8 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
                         truncated: backend.truncated || backend.count > output.len(),
                     })
                 }
+                #[cfg(feature = "incremental-backend-experiment")]
+                CompletionKind::Protocol => Err(Error::Protocol),
                 _ => Err(Error::Protocol),
             };
         }
@@ -606,6 +627,8 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
             }
             return match completion.kind {
                 CompletionKind::Connect(result) => result.map_err(Error::Backend),
+                #[cfg(feature = "incremental-backend-experiment")]
+                CompletionKind::Protocol => Err(Error::Protocol),
                 _ => Err(Error::Protocol),
             };
         }
@@ -629,6 +652,8 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
             }
             return match completion.kind {
                 CompletionKind::Disconnect(result) => result.map_err(Error::Backend),
+                #[cfg(feature = "incremental-backend-experiment")]
+                CompletionKind::Protocol => Err(Error::Protocol),
                 _ => Err(Error::Protocol),
             };
         }
@@ -807,8 +832,8 @@ impl<D: smoltcp::phy::Device> smoltcp::phy::Device for WifiDevice<D> {
 }
 
 pub(crate) struct Command {
-    sequence: u32,
-    kind: CommandKind,
+    pub(crate) sequence: u32,
+    pub(crate) kind: CommandKind,
 }
 
 pub(crate) enum CommandKind {
@@ -820,8 +845,8 @@ pub(crate) enum CommandKind {
 
 #[derive(Clone, Copy)]
 pub(crate) struct Completion {
-    sequence: u32,
-    kind: CompletionKind,
+    pub(crate) sequence: u32,
+    pub(crate) kind: CompletionKind,
 }
 
 #[derive(Clone, Copy)]
@@ -830,6 +855,8 @@ pub(crate) enum CompletionKind {
     Scan(Result<ScanOutcome, BackendError>),
     Connect(Result<ConnectionInfo, BackendError>),
     Disconnect(Result<(), BackendError>),
+    #[cfg(feature = "incremental-backend-experiment")]
+    Protocol,
 }
 
 #[cfg(test)]
