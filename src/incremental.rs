@@ -4,7 +4,10 @@
 //! cancellation, work-budget, and wait-set vocabulary before the validated WS63
 //! backend is migrated. It does not replace [`crate::WifiBackend`] yet.
 
-use core::num::{NonZeroU16, NonZeroU32};
+use core::{
+    num::{NonZeroU16, NonZeroU32},
+    task::{Context, Poll},
+};
 
 use crate::{
     BackendError, ConnectionInfo, ScanConfig, ScanOutcome, ScanResult, StationConfig, WifiConfig,
@@ -298,6 +301,55 @@ impl WaitSet {
     pub const fn intersects(self, other: Self) -> bool {
         self.0 & other.0 != 0
     }
+
+    /// Retain only sources also present in `other`.
+    pub const fn intersection(self, other: Self) -> Self {
+        Self(self.0 & other.0)
+    }
+
+    /// Remove every source present in `other`.
+    pub const fn without(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
+}
+
+/// Executor-neutral bridge for backend, L2, and timer wake sources.
+///
+/// The runner handles [`WaitSet::COMMAND`] itself. Implementations receive only
+/// the remaining subscribed sources and must use level-triggered readiness:
+/// before returning [`Poll::Pending`], register `cx.waker()` so an event that
+/// becomes ready before or during registration cannot be lost. A ready result
+/// may contain only bits from `sources`; the runner rejects extras.
+///
+/// `deadline_us` uses the backend's monotonic microsecond clock. When TIMER is
+/// subscribed and the deadline has elapsed, return a set containing
+/// [`WaitSet::TIMER`] without sleeping. Registration must be idempotent; a
+/// dropped wait future may leave its waker installed until the next poll.
+pub trait IncrementalWaitPlatform {
+    /// Platform-specific timer or wake-registration failure.
+    type Error;
+
+    /// Poll the currently subscribed non-command wake sources.
+    fn poll_ready(
+        &mut self,
+        cx: &mut Context<'_>,
+        sources: WaitSet,
+        deadline_us: Option<u64>,
+    ) -> Poll<Result<WaitSet, Self::Error>>;
+}
+
+/// Failure while composing command and platform wake sources.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IncrementalWaitError<E> {
+    /// The platform could not arm or poll a subscribed source.
+    Platform(E),
+    /// The platform reported a source that was not subscribed in this snapshot.
+    UnexpectedSources {
+        /// Non-command sources requested from the platform.
+        subscribed: WaitSet,
+        /// Sources reported ready by the platform.
+        ready: WaitSet,
+    },
 }
 
 /// One wake source selected for the next bounded runner step.

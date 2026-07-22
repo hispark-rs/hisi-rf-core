@@ -296,6 +296,22 @@ impl IncrementalRunnerState {
     pub const fn wait_for(&self) -> WaitSet {
         self.wait_for
     }
+
+    /// Add a driver-derived wake source for the current live operation.
+    pub(super) fn subscribe(
+        &mut self,
+        id: OperationId,
+        sources: WaitSet,
+    ) -> Result<(), RunnerStateError> {
+        if !matches!(
+            self.tracker.lifecycle(id)?,
+            OperationLifecycle::Started | OperationLifecycle::CancelRequested
+        ) {
+            return Err(OperationStateError::InvalidTransition.into());
+        }
+        self.wait_for = self.wait_for.union(sources);
+        Ok(())
+    }
 }
 
 impl Default for IncrementalRunnerState {

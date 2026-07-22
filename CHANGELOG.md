@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added an executor-neutral incremental wait-platform contract and
+  `IncrementalRadioRunner::wait_ready`, which registers command and platform
+  wake sources together without consuming commands or busy polling.
+
 ## [0.1.0-alpha.10] - 2026-07-23
 
 ### Added

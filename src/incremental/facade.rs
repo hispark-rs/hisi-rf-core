@@ -1,3 +1,5 @@
+use core::{future::poll_fn, task::Poll};
+
 use crate::wifi::{Command, CommandKind, Completion, CompletionKind};
 use crate::{
     BackendError, BackendErrorClass, RadioController, RadioState, WifiConfig, WifiEvent, WifiParts,
@@ -5,8 +7,9 @@ use crate::{
 
 use super::{
     CommandArbiterError, CommandSequence, IncrementalBackendDriver, IncrementalCompletion,
-    IncrementalDriverError, IncrementalDriverEvent, IncrementalRequest, IncrementalWaitIntent,
-    IncrementalWifiBackend, SubmitError, WaitSet, WorkBudget,
+    IncrementalDriverError, IncrementalDriverEvent, IncrementalRequest, IncrementalWaitError,
+    IncrementalWaitIntent, IncrementalWaitPlatform, IncrementalWifiBackend, SubmitError, WaitSet,
+    WorkBudget,
 };
 
 // A runner-local cancellation has no chip/backend status code to preserve.
@@ -166,6 +169,63 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
         self.state.shared.commands.ready_to_receive().await;
     }
 
+    /// Wait for one subscribed source without consuming a controller command.
+    ///
+    /// Immediate internal work returns an empty set; pass the returned set to
+    /// [`Self::run_once`] either way. Command readiness is registered through
+    /// the facade's bounded channel, while `platform` owns backend, L2, and
+    /// monotonic timer registration.
+    pub async fn wait_ready<P: IncrementalWaitPlatform>(
+        &self,
+        platform: &mut P,
+    ) -> Result<WaitSet, IncrementalWaitError<P::Error>> {
+        poll_fn(|cx| {
+            let intent = self.wait_intent();
+            if intent.run_immediately() {
+                return Poll::Ready(Ok(WaitSet::empty()));
+            }
+
+            let subscribed = intent.sources();
+            let mut ready = WaitSet::empty();
+            if subscribed.contains(WaitSet::COMMAND)
+                && self
+                    .state
+                    .shared
+                    .commands
+                    .poll_ready_to_receive(cx)
+                    .is_ready()
+            {
+                ready = ready.union(WaitSet::COMMAND);
+            }
+
+            let platform_sources = subscribed.without(WaitSet::COMMAND);
+            if !platform_sources.is_empty() {
+                match platform.poll_ready(cx, platform_sources, intent.deadline_us()) {
+                    Poll::Pending => {}
+                    Poll::Ready(Err(error)) => {
+                        return Poll::Ready(Err(IncrementalWaitError::Platform(error)));
+                    }
+                    Poll::Ready(Ok(platform_ready)) => {
+                        if !platform_ready.without(platform_sources).is_empty() {
+                            return Poll::Ready(Err(IncrementalWaitError::UnexpectedSources {
+                                subscribed: platform_sources,
+                                ready: platform_ready,
+                            }));
+                        }
+                        ready = ready.union(platform_ready);
+                    }
+                }
+            }
+
+            if ready.is_empty() {
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(ready))
+            }
+        })
+        .await
+    }
+
     /// Borrow the chip backend for platform wake registration and diagnostics.
     pub const fn backend(&self) -> &B {
         self.driver.backend()
@@ -318,6 +378,7 @@ mod tests {
         completion: Option<IncrementalCompletion>,
         force_mismatch: bool,
         cancel_calls: u8,
+        deadline_us: Option<u64>,
     }
 
     impl FakeBackend {
@@ -326,6 +387,7 @@ mod tests {
                 completion: None,
                 force_mismatch: false,
                 cancel_calls: 0,
+                deadline_us: None,
             }
         }
 
@@ -334,6 +396,16 @@ mod tests {
                 completion: None,
                 force_mismatch: true,
                 cancel_calls: 0,
+                deadline_us: None,
+            }
+        }
+
+        const fn with_deadline(deadline_us: u64) -> Self {
+            Self {
+                completion: None,
+                force_mismatch: false,
+                cancel_calls: 0,
+                deadline_us: Some(deadline_us),
             }
         }
     }
@@ -400,7 +472,39 @@ mod tests {
         }
 
         fn next_deadline_us(&self, _id: OperationId) -> Option<u64> {
-            None
+            self.deadline_us
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeWaitPlatform {
+        ready: WaitSet,
+        error: Option<u8>,
+        calls: u8,
+        last_sources: WaitSet,
+        last_deadline_us: Option<u64>,
+    }
+
+    impl IncrementalWaitPlatform for FakeWaitPlatform {
+        type Error = u8;
+
+        fn poll_ready(
+            &mut self,
+            _cx: &mut Context<'_>,
+            sources: WaitSet,
+            deadline_us: Option<u64>,
+        ) -> Poll<Result<WaitSet, Self::Error>> {
+            self.calls += 1;
+            self.last_sources = sources;
+            self.last_deadline_us = deadline_us;
+            if let Some(error) = self.error {
+                return Poll::Ready(Err(error));
+            }
+            if self.ready.is_empty() {
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(self.ready))
+            }
         }
     }
 
@@ -411,6 +515,103 @@ mod tests {
 
     fn budget() -> WorkBudget {
         WorkBudget::try_new(4, 100).unwrap()
+    }
+
+    #[test]
+    fn unified_wait_registers_command_and_platform_without_consuming() {
+        let state = Box::leak(Box::new(RadioState::<2>::new()));
+        let radio = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: FakeBackend::with_deadline(42),
+                device: (),
+            },
+            state,
+        )
+        .unwrap();
+        let IncrementalRadioParts {
+            mut wifi,
+            mut runner,
+        } = radio.split_incremental(budget());
+        let mut platform = FakeWaitPlatform::default();
+        let mut initialize = core::pin::pin!(wifi.controller.initialize());
+
+        {
+            let mut wait = core::pin::pin!(runner.wait_ready(&mut platform));
+            assert!(poll(wait.as_mut()).is_pending());
+            assert!(poll(initialize.as_mut()).is_pending());
+            assert_eq!(poll(wait.as_mut()), Poll::Ready(Ok(WaitSet::empty())));
+        }
+        assert_eq!(platform.calls, 0, "idle runner waits only for commands");
+
+        assert!(matches!(
+            runner.run_once(WaitSet::empty()).unwrap(),
+            IncrementalDriverEvent::Started { .. }
+        ));
+
+        platform.ready = WaitSet::TIMER;
+        {
+            let mut wait = core::pin::pin!(runner.wait_ready(&mut platform));
+            assert_eq!(poll(wait.as_mut()), Poll::Ready(Ok(WaitSet::TIMER)));
+        }
+        assert_eq!(
+            platform.last_sources,
+            WaitSet::BACKEND.union(WaitSet::TIMER)
+        );
+        assert_eq!(platform.last_deadline_us, Some(42));
+        assert!(matches!(
+            runner.run_once(WaitSet::TIMER).unwrap(),
+            IncrementalDriverEvent::Completed { .. }
+        ));
+        assert_eq!(poll(initialize.as_mut()), Poll::Ready(Ok(())));
+    }
+
+    #[test]
+    fn unified_wait_fails_closed_on_platform_error_or_unsubscribed_source() {
+        let state = Box::leak(Box::new(RadioState::<2>::new()));
+        let radio = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: FakeBackend::new(),
+                device: (),
+            },
+            state,
+        )
+        .unwrap();
+        let IncrementalRadioParts {
+            mut wifi,
+            mut runner,
+        } = radio.split_incremental(budget());
+        let mut initialize = core::pin::pin!(wifi.controller.initialize());
+        assert!(poll(initialize.as_mut()).is_pending());
+        let _ = runner.run_once(WaitSet::empty()).unwrap();
+
+        let mut failed = FakeWaitPlatform {
+            error: Some(7),
+            ..Default::default()
+        };
+        {
+            let mut wait = core::pin::pin!(runner.wait_ready(&mut failed));
+            assert_eq!(
+                poll(wait.as_mut()),
+                Poll::Ready(Err(IncrementalWaitError::Platform(7)))
+            );
+        }
+
+        let mut invalid = FakeWaitPlatform {
+            ready: WaitSet::L2_RX,
+            ..Default::default()
+        };
+        {
+            let mut wait = core::pin::pin!(runner.wait_ready(&mut invalid));
+            assert_eq!(
+                poll(wait.as_mut()),
+                Poll::Ready(Err(IncrementalWaitError::UnexpectedSources {
+                    subscribed: WaitSet::BACKEND,
+                    ready: WaitSet::L2_RX,
+                }))
+            );
+        }
     }
 
     #[test]

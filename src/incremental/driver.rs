@@ -292,6 +292,9 @@ impl<B: IncrementalWifiBackend> IncrementalBackendDriver<B> {
         if active != operation {
             return Err(CommandArbiterError::StaleOperation.into());
         }
+        if ready.contains(WaitSet::TIMER) && self.backend.next_deadline_us(operation).is_some() {
+            self.runner.subscribe(operation, WaitSet::TIMER)?;
+        }
         match self.runner.select_step(ready) {
             RunnerStep::Idle | RunnerStep::CommandReady(_) => {
                 Err(CommandArbiterError::InvalidTransition.into())
