@@ -284,6 +284,10 @@ pub enum BackendErrorClass {
     Busy,
     /// A bounded operation timed out.
     Timeout,
+    /// The operation was explicitly cancelled before completion.
+    Cancelled,
+    /// The selected profile could not acquire a required bounded resource.
+    ResourceUnavailable,
     /// The requested security mode is unsupported.
     UnsupportedSecurity,
     /// Association or authorization failed.
@@ -316,7 +320,10 @@ impl BackendError {
             BackendErrorClass::UnsupportedSecurity | BackendErrorClass::Connect => {
                 DiagnosticStage::Connect
             }
-            BackendErrorClass::Busy | BackendErrorClass::Timeout => DiagnosticStage::Operation,
+            BackendErrorClass::Busy | BackendErrorClass::Timeout | BackendErrorClass::Cancelled => {
+                DiagnosticStage::Operation
+            }
+            BackendErrorClass::ResourceUnavailable => DiagnosticStage::Runtime,
             BackendErrorClass::Other => DiagnosticStage::Backend,
         };
         Self {

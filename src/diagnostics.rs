@@ -21,6 +21,10 @@ pub enum DiagnosticCode {
     BackendBusy,
     /// A bounded backend operation timed out.
     BackendTimeout,
+    /// A requested operation was cancelled before completion.
+    OperationCancelled,
+    /// A bounded runtime or profile resource was unavailable.
+    ResourceUnavailable,
     /// The selected security mode is unsupported by this build or target.
     UnsupportedSecurity,
     /// Association or authorization failed.
@@ -39,6 +43,8 @@ impl DiagnosticCode {
             Self::BackendInitialize => "backend.initialize",
             Self::BackendBusy => "backend.busy",
             Self::BackendTimeout => "backend.timeout",
+            Self::OperationCancelled => "operation.cancelled",
+            Self::ResourceUnavailable => "resource.unavailable",
             Self::UnsupportedSecurity => "wifi.unsupported_security",
             Self::ConnectionFailed => "wifi.connection_failed",
             Self::BackendOther => "backend.other",
@@ -114,6 +120,10 @@ pub enum DiagnosticTraceKind {
     DriverContext,
     /// Runtime service error code.
     RuntimeCode,
+    /// Amount of a bounded resource required by the selected profile.
+    ResourceRequired,
+    /// Amount of a bounded resource available before initialization.
+    ResourceAvailable,
 }
 
 impl DiagnosticTraceKind {
@@ -126,6 +136,8 @@ impl DiagnosticTraceKind {
             Self::SupplicantContext => "supplicant_context",
             Self::DriverContext => "driver_context",
             Self::RuntimeCode => "runtime_code",
+            Self::ResourceRequired => "resource_required",
+            Self::ResourceAvailable => "resource_available",
         }
     }
 }
@@ -219,6 +231,8 @@ pub enum RecoveryAction {
     WaitAndRetry,
     /// Retry the bounded operation; repeated failures require deeper inspection.
     RetryOperation,
+    /// Increase the declared resources or select a smaller validated profile.
+    ProvideResources,
     /// Select a security profile supported by the target and build.
     SelectSupportedSecurity,
     /// Inspect network status and the lossless backend code before retrying.
@@ -237,6 +251,7 @@ impl RecoveryAction {
             Self::Reinitialize => "reinitialize",
             Self::WaitAndRetry => "wait_and_retry",
             Self::RetryOperation => "retry_operation",
+            Self::ProvideResources => "provide_resources",
             Self::SelectSupportedSecurity => "select_supported_security",
             Self::InspectNetworkAndRetry => "inspect_network_and_retry",
             Self::InspectBackendCode => "inspect_backend_code",
@@ -303,6 +318,8 @@ impl Diagnostic {
             DiagnosticCode::BackendInitialize => "errors-backend-initialize",
             DiagnosticCode::BackendBusy => "errors-backend-busy",
             DiagnosticCode::BackendTimeout => "errors-backend-timeout",
+            DiagnosticCode::OperationCancelled => "errors-operation-cancelled",
+            DiagnosticCode::ResourceUnavailable => "errors-resource-unavailable",
             DiagnosticCode::UnsupportedSecurity => "errors-wifi-unsupported-security",
             DiagnosticCode::ConnectionFailed => "errors-wifi-connection-failed",
             DiagnosticCode::BackendOther => "errors-backend-other",
@@ -410,6 +427,14 @@ impl BackendError {
             BackendErrorClass::Timeout => (
                 DiagnosticCode::BackendTimeout,
                 RecoveryAction::RetryOperation,
+            ),
+            BackendErrorClass::Cancelled => (
+                DiagnosticCode::OperationCancelled,
+                RecoveryAction::RetryOperation,
+            ),
+            BackendErrorClass::ResourceUnavailable => (
+                DiagnosticCode::ResourceUnavailable,
+                RecoveryAction::ProvideResources,
             ),
             BackendErrorClass::UnsupportedSecurity => (
                 DiagnosticCode::UnsupportedSecurity,
@@ -533,5 +558,70 @@ mod tests {
             .diagnostic();
         assert_eq!(diagnostic.trace().len(), DIAGNOSTIC_TRACE_CAPACITY);
         assert!(diagnostic.trace().is_truncated());
+    }
+
+    #[test]
+    fn public_diagnostic_fixture_matrix_preserves_stage_class_and_context() {
+        let fixtures = [
+            (
+                BackendError::new(BackendErrorClass::Connect, 30)
+                    .with_stage(DiagnosticStage::Associate)
+                    .with_trace(DiagnosticTraceKind::IeeeStatus, 30),
+                DiagnosticCode::ConnectionFailed,
+                DiagnosticStage::Associate,
+                RecoveryAction::InspectNetworkAndRetry,
+            ),
+            (
+                BackendError::new(BackendErrorClass::Timeout, 0x45)
+                    .with_stage(DiagnosticStage::Eapol),
+                DiagnosticCode::BackendTimeout,
+                DiagnosticStage::Eapol,
+                RecoveryAction::RetryOperation,
+            ),
+            (
+                BackendError::new(BackendErrorClass::Cancelled, 0)
+                    .with_stage(DiagnosticStage::ControlPlane),
+                DiagnosticCode::OperationCancelled,
+                DiagnosticStage::ControlPlane,
+                RecoveryAction::RetryOperation,
+            ),
+            (
+                BackendError::new(BackendErrorClass::ResourceUnavailable, 4)
+                    .with_stage(DiagnosticStage::Runtime)
+                    .with_trace(DiagnosticTraceKind::ResourceRequired, 7)
+                    .with_trace(DiagnosticTraceKind::ResourceAvailable, 3),
+                DiagnosticCode::ResourceUnavailable,
+                DiagnosticStage::Runtime,
+                RecoveryAction::ProvideResources,
+            ),
+            (
+                BackendError::new(BackendErrorClass::Timeout, 7)
+                    .with_stage(DiagnosticStage::Runtime)
+                    .with_trace(DiagnosticTraceKind::RuntimeCode, 7),
+                DiagnosticCode::BackendTimeout,
+                DiagnosticStage::Runtime,
+                RecoveryAction::RetryOperation,
+            ),
+        ];
+
+        for (error, code, stage, action) in fixtures {
+            let diagnostic = error.diagnostic();
+            assert_eq!(diagnostic.code(), code);
+            assert_eq!(diagnostic.stage(), stage);
+            assert_eq!(diagnostic.action(), action);
+            assert_eq!(diagnostic.backend_code(), Some(error.code()));
+        }
+
+        let resource = fixtures[3].0.diagnostic().trace();
+        assert_eq!(
+            resource.get(0).map(DiagnosticTraceEntry::kind),
+            Some(DiagnosticTraceKind::ResourceRequired)
+        );
+        assert_eq!(resource.get(0).map(DiagnosticTraceEntry::value), Some(7));
+        assert_eq!(
+            resource.get(1).map(DiagnosticTraceEntry::kind),
+            Some(DiagnosticTraceKind::ResourceAvailable)
+        );
+        assert_eq!(resource.get(1).map(DiagnosticTraceEntry::value), Some(3));
     }
 }
