@@ -10,6 +10,13 @@ use crate::{
     BackendError, ConnectionInfo, ScanConfig, ScanOutcome, ScanResult, StationConfig, WifiConfig,
 };
 
+mod runner;
+
+pub use runner::{
+    CancelDirective, FairWakeSelector, IncrementalRunnerState, RunnerStateError, RunnerStep,
+    RunnerTransition,
+};
+
 /// Identity of one backend operation slot and its current generation.
 ///
 /// Reusing a slot increments `generation`, so a completion retained from an
@@ -161,7 +168,8 @@ impl OperationTracker {
         Ok(())
     }
 
-    fn lifecycle(&self, id: OperationId) -> Result<OperationLifecycle, OperationStateError> {
+    /// Return the lifecycle of `id`, rejecting stale identities.
+    pub fn lifecycle(&self, id: OperationId) -> Result<OperationLifecycle, OperationStateError> {
         let Some((current, lifecycle)) = self.current else {
             return Err(OperationStateError::Stale);
         };
@@ -254,6 +262,60 @@ impl WaitSet {
     pub const fn bits(self) -> u8 {
         self.0
     }
+
+    /// Construct the singleton set for one wake reason.
+    pub const fn from_reason(reason: WakeReason) -> Self {
+        Self(reason.bit())
+    }
+
+    /// Test whether the set has no wake sources.
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Test whether the sets share at least one wake source.
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+/// One wake source selected for the next bounded runner step.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WakeReason {
+    /// A controller command is waiting.
+    Command,
+    /// A backend callback or deferred IRQ made protocol work ready.
+    Backend,
+    /// Link-layer receive work is ready.
+    L2Rx,
+    /// The next backend deadline elapsed.
+    Timer,
+}
+
+impl WakeReason {
+    const COUNT: u8 = 4;
+
+    const fn from_index(index: u8) -> Self {
+        match index {
+            0 => Self::Command,
+            1 => Self::Backend,
+            2 => Self::L2Rx,
+            _ => Self::Timer,
+        }
+    }
+
+    const fn index(self) -> u8 {
+        match self {
+            Self::Command => 0,
+            Self::Backend => 1,
+            Self::L2Rx => 2,
+            Self::Timer => 3,
+        }
+    }
+
+    const fn bit(self) -> u8 {
+        1 << self.index()
+    }
 }
 
 /// Request moved into an incremental backend.
@@ -291,32 +353,56 @@ pub enum PollDisposition {
     Complete(IncrementalCompletion),
     /// Cancellation reached a terminal state.
     Cancelled,
+    /// The poll consumed its granted budget and requires another fair turn.
+    BudgetExhausted(WaitSet),
 }
 
 /// Verified accounting for one backend poll.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WorkReport {
+    operation: OperationId,
     consumed_events: u16,
     elapsed_us: u32,
+    made_progress: bool,
     disposition: PollDisposition,
 }
 
 impl WorkReport {
     /// Construct a report only when both budget dimensions were respected.
     pub const fn try_new(
+        operation: OperationId,
         budget: WorkBudget,
         consumed_events: u16,
         elapsed_us: u32,
+        made_progress: bool,
         disposition: PollDisposition,
     ) -> Option<Self> {
         if consumed_events > budget.max_events.get() || elapsed_us > budget.max_time_us.get() {
             return None;
         }
+        if matches!(disposition, PollDisposition::BudgetExhausted(_))
+            && consumed_events != budget.max_events.get()
+            && elapsed_us != budget.max_time_us.get()
+        {
+            return None;
+        }
+        if matches!(disposition, PollDisposition::Pending(wait) if wait.is_empty())
+            && !made_progress
+        {
+            return None;
+        }
         Some(Self {
+            operation,
             consumed_events,
             elapsed_us,
+            made_progress,
             disposition,
         })
+    }
+
+    /// Operation identity advanced by this report.
+    pub const fn operation(self) -> OperationId {
+        self.operation
     }
 
     /// Number of protocol/backend events consumed by this poll.
@@ -327,6 +413,11 @@ impl WorkReport {
     /// Backend-measured elapsed time in microseconds.
     pub const fn elapsed_us(self) -> u32 {
         self.elapsed_us
+    }
+
+    /// Whether the backend changed protocol-visible state.
+    pub const fn made_progress(self) -> bool {
+        self.made_progress
     }
 
     /// Pending, complete, or cancelled result.
@@ -348,12 +439,16 @@ pub trait IncrementalWifiBackend {
     fn poll(
         &mut self,
         id: OperationId,
+        reason: WakeReason,
         budget: WorkBudget,
         scan_output: &mut [ScanResult],
     ) -> Result<WorkReport, BackendError>;
 
     /// Request cancellation. Terminal cancellation is observed through `poll`.
     fn cancel(&mut self, id: OperationId) -> Result<(), BackendError>;
+
+    /// Monotonic deadline for the next timer wake, in microseconds.
+    fn next_deadline_us(&self, id: OperationId) -> Option<u64>;
 }
 
 #[cfg(test)]
@@ -381,6 +476,7 @@ mod tests {
         fn poll(
             &mut self,
             id: OperationId,
+            _reason: WakeReason,
             budget: WorkBudget,
             _scan_output: &mut [ScanResult],
         ) -> Result<WorkReport, BackendError> {
@@ -394,7 +490,7 @@ mod tests {
                 self.active = None;
                 PollDisposition::Complete(IncrementalCompletion::Initialized)
             };
-            WorkReport::try_new(budget, 1, 10, disposition)
+            WorkReport::try_new(id, budget, 1, 10, true, disposition)
                 .ok_or_else(|| BackendError::new(crate::BackendErrorClass::Other, 3))
         }
 
@@ -405,6 +501,10 @@ mod tests {
             } else {
                 Err(BackendError::new(crate::BackendErrorClass::Other, 2))
             }
+        }
+
+        fn next_deadline_us(&self, id: OperationId) -> Option<u64> {
+            (self.active == Some(id)).then_some(1_000)
         }
     }
 
@@ -452,14 +552,56 @@ mod tests {
         let wait = WaitSet::COMMAND
             .union(WaitSet::BACKEND)
             .union(WaitSet::TIMER);
-        let report = WorkReport::try_new(budget, 3, 200, PollDisposition::Pending(wait)).unwrap();
+        let mut tracker = OperationTracker::new();
+        let id = tracker.queue(0).unwrap();
+        let report =
+            WorkReport::try_new(id, budget, 3, 200, true, PollDisposition::Pending(wait)).unwrap();
+        assert_eq!(report.operation(), id);
         assert_eq!(report.consumed_events(), 3);
         assert_eq!(report.elapsed_us(), 200);
+        assert!(report.made_progress());
         assert!(wait.contains(WaitSet::COMMAND));
         assert!(wait.contains(WaitSet::BACKEND));
         assert!(!wait.contains(WaitSet::L2_RX));
-        assert!(WorkReport::try_new(budget, 4, 1, PollDisposition::Pending(wait)).is_none());
-        assert!(WorkReport::try_new(budget, 1, 201, PollDisposition::Pending(wait)).is_none());
+        assert!(
+            WorkReport::try_new(id, budget, 4, 1, true, PollDisposition::Pending(wait)).is_none()
+        );
+        assert!(
+            WorkReport::try_new(id, budget, 1, 201, true, PollDisposition::Pending(wait)).is_none()
+        );
+        assert!(
+            WorkReport::try_new(
+                id,
+                budget,
+                1,
+                1,
+                true,
+                PollDisposition::BudgetExhausted(wait),
+            )
+            .is_none()
+        );
+        assert!(
+            WorkReport::try_new(
+                id,
+                budget,
+                3,
+                1,
+                true,
+                PollDisposition::BudgetExhausted(wait),
+            )
+            .is_some()
+        );
+        assert!(
+            WorkReport::try_new(
+                id,
+                budget,
+                0,
+                0,
+                false,
+                PollDisposition::Pending(WaitSet::empty()),
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -477,17 +619,210 @@ mod tests {
 
         let budget = WorkBudget::try_new(2, 50).unwrap();
         let mut scan_results = [ScanResult::EMPTY; 1];
-        let first = backend.poll(id, budget, &mut scan_results).unwrap();
+        let first = backend
+            .poll(id, WakeReason::Backend, budget, &mut scan_results)
+            .unwrap();
         assert_eq!(
             first.disposition(),
             PollDisposition::Pending(WaitSet::BACKEND.union(WaitSet::TIMER))
         );
-        let second = backend.poll(id, budget, &mut scan_results).unwrap();
+        let second = backend
+            .poll(id, WakeReason::Timer, budget, &mut scan_results)
+            .unwrap();
         assert_eq!(
             second.disposition(),
             PollDisposition::Complete(IncrementalCompletion::Initialized)
         );
         assert!(!tracker.commit_terminal(id).unwrap());
         tracker.reap(id).unwrap();
+    }
+
+    #[test]
+    fn fair_selector_rotates_across_continuously_ready_sources() {
+        let all = WaitSet::COMMAND
+            .union(WaitSet::BACKEND)
+            .union(WaitSet::L2_RX)
+            .union(WaitSet::TIMER);
+        let mut selector = FairWakeSelector::new();
+        assert_eq!(selector.select(all, all), Some(WakeReason::Command));
+        assert_eq!(selector.select(all, all), Some(WakeReason::Backend));
+        assert_eq!(selector.select(all, all), Some(WakeReason::L2Rx));
+        assert_eq!(selector.select(all, all), Some(WakeReason::Timer));
+        assert_eq!(selector.select(all, all), Some(WakeReason::Command));
+    }
+
+    #[test]
+    fn cancellation_before_start_completes_without_backend_notification() {
+        let mut runner = IncrementalRunnerState::new();
+        let id = runner.queue(0).unwrap();
+        assert_eq!(
+            runner.queue(1),
+            Err(RunnerStateError::Operation(OperationStateError::Busy))
+        );
+        assert_eq!(
+            runner.request_cancel(id),
+            Ok(CancelDirective::CompleteLocally)
+        );
+        assert_eq!(runner.current(), Some((id, OperationLifecycle::Terminal)));
+        assert_eq!(runner.select_step(WaitSet::COMMAND), RunnerStep::Idle);
+        runner.reap(id).unwrap();
+        assert_eq!(runner.current(), None);
+    }
+
+    #[test]
+    fn queued_operation_rejects_a_backend_report() {
+        let mut runner = IncrementalRunnerState::new();
+        let id = runner.queue(0).unwrap();
+        let budget = WorkBudget::try_new(1, 10).unwrap();
+        let report = WorkReport::try_new(
+            id,
+            budget,
+            1,
+            10,
+            true,
+            PollDisposition::Complete(IncrementalCompletion::Initialized),
+        )
+        .unwrap();
+        assert_eq!(
+            runner.apply_report(id, report),
+            Err(RunnerStateError::Operation(
+                OperationStateError::InvalidTransition
+            ))
+        );
+    }
+
+    #[test]
+    fn cancellation_after_start_suppresses_a_late_success() {
+        let mut runner = IncrementalRunnerState::new();
+        let id = runner.queue(0).unwrap();
+        runner.mark_started(id).unwrap();
+        assert_eq!(
+            runner.request_cancel(id),
+            Ok(CancelDirective::NotifyBackend)
+        );
+        let budget = WorkBudget::try_new(1, 10).unwrap();
+        let report = WorkReport::try_new(
+            id,
+            budget,
+            1,
+            10,
+            true,
+            PollDisposition::Complete(IncrementalCompletion::Initialized),
+        )
+        .unwrap();
+        assert_eq!(
+            runner.apply_report(id, report),
+            Ok(RunnerTransition::Cancelled {
+                suppressed_completion: true,
+            })
+        );
+    }
+
+    #[test]
+    fn stale_report_cannot_complete_a_reused_runner_slot() {
+        let mut runner = IncrementalRunnerState::new();
+        let first = runner.queue(0).unwrap();
+        runner.mark_started(first).unwrap();
+        let budget = WorkBudget::try_new(1, 10).unwrap();
+        let first_report = WorkReport::try_new(
+            first,
+            budget,
+            1,
+            10,
+            true,
+            PollDisposition::Complete(IncrementalCompletion::Initialized),
+        )
+        .unwrap();
+        runner.apply_report(first, first_report).unwrap();
+        runner.reap(first).unwrap();
+
+        let second = runner.queue(0).unwrap();
+        runner.mark_started(second).unwrap();
+        assert_eq!(
+            runner.apply_report(second, first_report),
+            Err(RunnerStateError::StaleReport {
+                expected: second,
+                actual: first,
+            })
+        );
+        assert_eq!(
+            runner.current(),
+            Some((second, OperationLifecycle::Started))
+        );
+    }
+
+    #[test]
+    fn runner_selects_control_without_starving_backend_rx_or_timer() {
+        let mut runner = IncrementalRunnerState::new();
+        let id = runner.queue(0).unwrap();
+        runner.mark_started(id).unwrap();
+        let budget = WorkBudget::try_new(4, 100).unwrap();
+        let all = WaitSet::COMMAND
+            .union(WaitSet::BACKEND)
+            .union(WaitSet::L2_RX)
+            .union(WaitSet::TIMER);
+        let subscribed =
+            WorkReport::try_new(id, budget, 1, 10, true, PollDisposition::Pending(all)).unwrap();
+        runner.apply_report(id, subscribed).unwrap();
+
+        assert_eq!(runner.select_step(all), RunnerStep::CommandReady(id));
+        assert_eq!(
+            runner.select_step(all),
+            RunnerStep::PollBackend {
+                operation: id,
+                reason: WakeReason::Backend,
+            }
+        );
+        assert_eq!(
+            runner.select_step(all),
+            RunnerStep::PollBackend {
+                operation: id,
+                reason: WakeReason::L2Rx,
+            }
+        );
+        assert_eq!(
+            runner.select_step(all),
+            RunnerStep::PollBackend {
+                operation: id,
+                reason: WakeReason::Timer,
+            }
+        );
+        assert_eq!(runner.select_step(all), RunnerStep::CommandReady(id));
+    }
+
+    #[test]
+    fn budget_exhaustion_requires_a_fair_follow_up_turn() {
+        let mut runner = IncrementalRunnerState::new();
+        let id = runner.queue(0).unwrap();
+        runner.mark_started(id).unwrap();
+        let budget = WorkBudget::try_new(2, 100).unwrap();
+        let wait_for = WaitSet::BACKEND.union(WaitSet::TIMER);
+        let report = WorkReport::try_new(
+            id,
+            budget,
+            2,
+            20,
+            true,
+            PollDisposition::BudgetExhausted(wait_for),
+        )
+        .unwrap();
+        assert_eq!(
+            runner.apply_report(id, report),
+            Ok(RunnerTransition::BudgetExhausted {
+                made_progress: true,
+                wait_for,
+            })
+        );
+        assert_eq!(
+            runner.select_step(WaitSet::COMMAND),
+            RunnerStep::Waiting(wait_for)
+        );
+        assert_eq!(
+            runner.select_step(WaitSet::TIMER),
+            RunnerStep::PollBackend {
+                operation: id,
+                reason: WakeReason::Timer,
+            }
+        );
     }
 }

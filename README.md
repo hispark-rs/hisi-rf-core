@@ -24,5 +24,6 @@ the single-dependency facade and WS63 backend are stabilized.
 
 The `incremental-backend-experiment` feature exposes the non-default A5B
 operation protocol: generation-tagged identities, explicit cancellation,
-bounded work reports, and runner wake sets. The validated blocking backend
-remains the default until host interleaving and silicon parity gates pass.
+bounded work reports, a deterministic runner state machine, and fair command,
+backend, L2 RX, and timer wake selection. The validated blocking backend remains
+the default until host interleaving and silicon parity gates pass.

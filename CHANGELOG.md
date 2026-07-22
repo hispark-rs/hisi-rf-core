@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-07-23
+
+### Added
+
+- Added a deterministic incremental runner state machine with fair command,
+  backend, L2 RX, and timer wake selection.
+- Bound every work report to an operation generation and defined queued/start,
+  cancel-before-start, cancel-after-start, stale completion, and budget-exhausted
+  transitions.
+
+### Changed
+
+- Tightened the experimental backend poll contract with an explicit wake reason,
+  next deadline, progress accounting, and fail-closed budget validation. The
+  validated blocking backend remains unchanged and is still the default.
+
 ## [0.1.0-alpha.6] - 2026-07-23
 
 ### Added
@@ -73,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit WPA2/WPA3-Personal transition scan classification; callers choose
   PSK or SAE instead of discovery silently downgrading to WPA2.
 
-[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.6...HEAD
+[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.7...HEAD
+[0.1.0-alpha.7]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.4

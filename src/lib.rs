@@ -23,9 +23,10 @@ pub use diagnostics::{
 };
 #[cfg(feature = "incremental-backend-experiment")]
 pub use incremental::{
-    CancelOutcome, IncrementalCompletion, IncrementalRequest, IncrementalWifiBackend, OperationId,
-    OperationLifecycle, OperationStateError, OperationTracker, PollDisposition, WaitSet,
-    WorkBudget, WorkReport,
+    CancelDirective, CancelOutcome, FairWakeSelector, IncrementalCompletion, IncrementalRequest,
+    IncrementalRunnerState, IncrementalWifiBackend, OperationId, OperationLifecycle,
+    OperationStateError, OperationTracker, PollDisposition, RunnerStateError, RunnerStep,
+    RunnerTransition, WaitSet, WakeReason, WorkBudget, WorkReport,
 };
 pub use wifi::{
     BackendError, BackendErrorClass, ConnectionInfo, EventDiagnostics, ManagementFrameProtection,
