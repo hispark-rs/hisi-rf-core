@@ -110,8 +110,12 @@ impl DiagnosticStage {
 pub enum DiagnosticTraceKind {
     /// Raw status returned by the backend or protocol engine.
     BackendStatus,
+    /// Raw status returned by a chip vendor driver or firmware ABI.
+    VendorStatus,
     /// IEEE 802.11 status code from authentication/association.
     IeeeStatus,
+    /// Raw signed status returned by the pinned upstream hostap port.
+    HostapStatus,
     /// Wi-Fi disconnect reason.
     DisconnectReason,
     /// Upstream hostap context state snapshot.
@@ -131,7 +135,9 @@ impl DiagnosticTraceKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::BackendStatus => "backend_status",
+            Self::VendorStatus => "vendor_status",
             Self::IeeeStatus => "ieee_status",
+            Self::HostapStatus => "hostap_status",
             Self::DisconnectReason => "disconnect_reason",
             Self::SupplicantContext => "supplicant_context",
             Self::DriverContext => "driver_context",
@@ -499,6 +505,22 @@ mod tests {
         assert_eq!(diagnostic.stage(), DiagnosticStage::Backend);
         assert_eq!(diagnostic.action(), RecoveryAction::InspectBackendCode);
         assert_eq!(diagnostic.backend_code(), Some(0xdeaf_0042));
+    }
+
+    #[test]
+    fn numeric_sources_remain_distinct_and_lossless() {
+        let diagnostic = BackendError::new(BackendErrorClass::Connect, 0x5732_1234)
+            .with_stage(DiagnosticStage::Associate)
+            .with_trace(DiagnosticTraceKind::VendorStatus, 8_030)
+            .with_trace(DiagnosticTraceKind::IeeeStatus, 30)
+            .with_trace(DiagnosticTraceKind::HostapStatus, (-17_i32) as u32)
+            .diagnostic();
+        let mut json = String::new();
+        diagnostic.write_json(&mut json).unwrap();
+
+        assert!(json.contains("\"kind\":\"vendor_status\",\"value\":8030"));
+        assert!(json.contains("\"kind\":\"ieee_status\",\"value\":30"));
+        assert!(json.contains("\"kind\":\"hostap_status\",\"value\":4294967279"));
     }
 
     #[test]

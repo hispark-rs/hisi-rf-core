@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026-07-23
+
+### Added
+
+- Distinct `vendor_status` and `hostap_status` numeric trace fields so
+  chip-driver, IEEE 802.11, and upstream supplicant failures remain
+  machine-distinguishable without carrying arbitrary text or secrets.
+
 ## [0.1.0-alpha.4] - 2026-07-23
 
 ### Added
@@ -56,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit WPA2/WPA3-Personal transition scan classification; callers choose
   PSK or SAE instead of discovery silently downgrading to WPA2.
 
-[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.4...HEAD
+[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.5...HEAD
+[0.1.0-alpha.5]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.2
