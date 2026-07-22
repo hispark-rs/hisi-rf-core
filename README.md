@@ -21,3 +21,8 @@ stages and raw status values remain observable without allocation or text logs.
 This crate has no PAC, radio blob, scheduler, allocator, ROM, NVS, TLS, or image
 format dependency. It is an early alpha; the public surface may change while
 the single-dependency facade and WS63 backend are stabilized.
+
+The `incremental-backend-experiment` feature exposes the non-default A5B
+operation protocol: generation-tagged identities, explicit cancellation,
+bounded work reports, and runner wake sets. The validated blocking backend
+remains the default until host interleaving and silicon parity gates pass.

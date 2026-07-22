@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-07-23
+
+### Added
+
+- Added the opt-in `incremental-backend-experiment` contract with generation-tagged
+  operation identities, explicit cancellation lifecycle, bounded work reports,
+  and a composable runner wait set. The existing blocking backend remains the
+  default.
+
 ## [0.1.0-alpha.5] - 2026-07-23
 
 ### Added
@@ -64,7 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit WPA2/WPA3-Personal transition scan classification; callers choose
   PSK or SAE instead of discovery silently downgrading to WPA2.
 
-[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.5...HEAD
+[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.6...HEAD
+[0.1.0-alpha.6]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.3

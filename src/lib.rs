@@ -12,12 +12,20 @@
 #![no_std]
 
 mod diagnostics;
+#[cfg(feature = "incremental-backend-experiment")]
+mod incremental;
 mod state;
 mod wifi;
 
 pub use diagnostics::{
     DIAGNOSTIC_SCHEMA, DIAGNOSTIC_TRACE_CAPACITY, Diagnostic, DiagnosticCode, DiagnosticStage,
     DiagnosticTrace, DiagnosticTraceEntry, DiagnosticTraceKind, RecoveryAction,
+};
+#[cfg(feature = "incremental-backend-experiment")]
+pub use incremental::{
+    CancelOutcome, IncrementalCompletion, IncrementalRequest, IncrementalWifiBackend, OperationId,
+    OperationLifecycle, OperationStateError, OperationTracker, PollDisposition, WaitSet,
+    WorkBudget, WorkReport,
 };
 pub use wifi::{
     BackendError, BackendErrorClass, ConnectionInfo, EventDiagnostics, ManagementFrameProtection,
