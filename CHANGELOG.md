@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-07-22
+
+### Added
+
+- Allocation-free `hisi-rf-error/v2` diagnostics with explicit
+  scan/authenticate/associate/SAE/EAPOL/PMF/disconnect/runtime stages.
+- A four-entry numeric backend trace and immutable profile revision, with
+  deterministic JSON escaping and secret-redaction coverage.
+
+### Changed
+
+- `BackendError` now uses constructors and accessors so chip backends attach
+  stage/profile/trace context without exposing chip-private error enums.
+
 ## [0.1.0-alpha.2] - 2026-07-22
 
 ### Added
@@ -31,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit WPA2/WPA3-Personal transition scan classification; callers choose
   PSK or SAE instead of discovery silently downgrading to WPA2.
 
-[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.2...HEAD
+[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.3]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.1

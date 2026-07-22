@@ -15,7 +15,10 @@ mod diagnostics;
 mod state;
 mod wifi;
 
-pub use diagnostics::{Diagnostic, DiagnosticCode, DiagnosticStage, RecoveryAction};
+pub use diagnostics::{
+    DIAGNOSTIC_SCHEMA, DIAGNOSTIC_TRACE_CAPACITY, Diagnostic, DiagnosticCode, DiagnosticStage,
+    DiagnosticTrace, DiagnosticTraceEntry, DiagnosticTraceKind, RecoveryAction,
+};
 pub use wifi::{
     BackendError, BackendErrorClass, ConnectionInfo, EventDiagnostics, ManagementFrameProtection,
     Passphrase, PersonalSecurity, RadioConfig, RadioController, RadioParts, RadioResources,

@@ -1,7 +1,7 @@
 use portable_atomic::Ordering;
 
-use crate::Error;
 use crate::state::SharedState;
+use crate::{DiagnosticStage, DiagnosticTrace, DiagnosticTraceKind, Error};
 
 pub mod security;
 pub use security::{ManagementFrameProtection, PersonalSecurity, SaePwe};
@@ -292,13 +292,81 @@ pub enum BackendErrorClass {
     Other,
 }
 
-/// Backend error with a stable class and lossless chip-specific code.
+/// Backend error with a stable class and lossless chip-specific context.
+///
+/// Chip backends construct this value explicitly instead of exposing their
+/// private error enums through the portable API. The fixed-size diagnostic
+/// context remains allocation-free and contains no arbitrary backend text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BackendError {
     /// Stable failure class.
-    pub class: BackendErrorClass,
+    class: BackendErrorClass,
     /// Chip/backend-specific diagnostic code.
-    pub code: u32,
+    code: u32,
+    stage: DiagnosticStage,
+    profile_revision: Option<&'static str>,
+    trace: DiagnosticTrace,
+}
+
+impl BackendError {
+    /// Create an error with a stable class and lossless backend code.
+    pub const fn new(class: BackendErrorClass, code: u32) -> Self {
+        let stage = match class {
+            BackendErrorClass::Initialize => DiagnosticStage::Initialize,
+            BackendErrorClass::UnsupportedSecurity | BackendErrorClass::Connect => {
+                DiagnosticStage::Connect
+            }
+            BackendErrorClass::Busy | BackendErrorClass::Timeout => DiagnosticStage::Operation,
+            BackendErrorClass::Other => DiagnosticStage::Backend,
+        };
+        Self {
+            class,
+            code,
+            stage,
+            profile_revision: None,
+            trace: DiagnosticTrace::new(),
+        }
+    }
+
+    /// Stable backend failure class.
+    pub const fn class(self) -> BackendErrorClass {
+        self.class
+    }
+
+    /// Lossless chip/backend-specific code.
+    pub const fn code(self) -> u32 {
+        self.code
+    }
+
+    /// Attach the protocol stage known by the backend.
+    pub const fn with_stage(mut self, stage: DiagnosticStage) -> Self {
+        self.stage = stage;
+        self
+    }
+
+    /// Attach the immutable backend/profile revision used by this firmware.
+    pub const fn with_profile_revision(mut self, revision: &'static str) -> Self {
+        self.profile_revision = Some(revision);
+        self
+    }
+
+    /// Append one bounded numeric trace entry.
+    pub fn with_trace(mut self, kind: DiagnosticTraceKind, value: u32) -> Self {
+        self.trace.push(kind, value);
+        self
+    }
+
+    pub(crate) const fn stage(self) -> DiagnosticStage {
+        self.stage
+    }
+
+    pub(crate) const fn profile_revision(self) -> Option<&'static str> {
+        self.profile_revision
+    }
+
+    pub(crate) const fn trace(self) -> DiagnosticTrace {
+        self.trace
+    }
 }
 
 /// Successful and failed state transitions emitted by the runner.
@@ -927,10 +995,7 @@ mod tests {
     #[test]
     fn repeated_background_error_publishes_one_event() {
         let state = Box::leak(Box::new(RadioState::<2>::new()));
-        let error = BackendError {
-            class: BackendErrorClass::Other,
-            code: 0x55,
-        };
+        let error = BackendError::new(BackendErrorClass::Other, 0x55);
         let radio = init(
             RadioConfig::default(),
             RadioResources {

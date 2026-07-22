@@ -14,7 +14,9 @@ crate.
 Public errors expose an allocation-free, versioned diagnostic view with stable
 machine codes and recovery actions. The diagnostic schema deliberately excludes
 SSID, passphrase, key material, and arbitrary backend text while preserving a
-lossless numeric backend code.
+lossless numeric backend code. Schema v2 additionally carries an immutable
+backend profile revision and a fixed four-entry numeric trace, so protocol
+stages and raw status values remain observable without allocation or text logs.
 
 This crate has no PAC, radio blob, scheduler, allocator, ROM, NVS, TLS, or image
 format dependency. It is an early alpha; the public surface may change while
