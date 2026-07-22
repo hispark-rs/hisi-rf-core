@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.11] - 2026-07-23
+
 ### Added
 
 - Added an executor-neutral incremental wait-platform contract and
@@ -128,7 +130,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit WPA2/WPA3-Personal transition scan classification; callers choose
   PSK or SAE instead of discovery silently downgrading to WPA2.
 
-[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.8...HEAD
+[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.11...HEAD
+[0.1.0-alpha.11]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.10...v0.1.0-alpha.11
+[0.1.0-alpha.10]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
+[0.1.0-alpha.9]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.6
