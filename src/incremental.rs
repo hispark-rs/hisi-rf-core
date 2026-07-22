@@ -158,6 +158,16 @@ impl OperationTracker {
         Ok(cancelled)
     }
 
+    /// Mark a queued request terminal when the backend rejects `start`.
+    pub fn reject_queued(&mut self, id: OperationId) -> Result<(), OperationStateError> {
+        let lifecycle = self.lifecycle_mut(id)?;
+        if *lifecycle != OperationLifecycle::Queued {
+            return Err(OperationStateError::InvalidTransition);
+        }
+        *lifecycle = OperationLifecycle::Terminal;
+        Ok(())
+    }
+
     /// Release a collected terminal operation so the slot may be reused.
     pub fn reap(&mut self, id: OperationId) -> Result<(), OperationStateError> {
         let lifecycle = self.lifecycle(id)?;
@@ -688,6 +698,53 @@ mod tests {
             Err(RunnerStateError::Operation(
                 OperationStateError::InvalidTransition
             ))
+        );
+    }
+
+    #[test]
+    fn start_failure_terminalizes_and_releases_the_slot() {
+        let mut runner = IncrementalRunnerState::new();
+        let id = runner.queue(0).unwrap();
+        let error = BackendError::new(crate::BackendErrorClass::Initialize, 7);
+        assert_eq!(
+            runner.reject_start(id, error),
+            Ok(RunnerTransition::Failed {
+                error,
+                cancellation_pending: false,
+            })
+        );
+        runner.reap(id).unwrap();
+        assert!(runner.queue(0).is_ok());
+    }
+
+    #[test]
+    fn poll_failure_preserves_whether_cancellation_was_pending() {
+        let error = BackendError::new(crate::BackendErrorClass::Other, 9);
+
+        let mut active = IncrementalRunnerState::new();
+        let active_id = active.queue(0).unwrap();
+        active.mark_started(active_id).unwrap();
+        assert_eq!(
+            active.apply_error(active_id, error),
+            Ok(RunnerTransition::Failed {
+                error,
+                cancellation_pending: false,
+            })
+        );
+
+        let mut cancelling = IncrementalRunnerState::new();
+        let cancelling_id = cancelling.queue(0).unwrap();
+        cancelling.mark_started(cancelling_id).unwrap();
+        assert_eq!(
+            cancelling.request_cancel(cancelling_id),
+            Ok(CancelDirective::NotifyBackend)
+        );
+        assert_eq!(
+            cancelling.apply_error(cancelling_id, error),
+            Ok(RunnerTransition::Failed {
+                error,
+                cancellation_pending: true,
+            })
         );
     }
 

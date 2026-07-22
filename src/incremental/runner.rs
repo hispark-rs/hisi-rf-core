@@ -1,6 +1,6 @@
 use super::{
-    CancelOutcome, IncrementalCompletion, OperationId, OperationLifecycle, OperationStateError,
-    OperationTracker, PollDisposition, WaitSet, WakeReason, WorkReport,
+    BackendError, CancelOutcome, IncrementalCompletion, OperationId, OperationLifecycle,
+    OperationStateError, OperationTracker, PollDisposition, WaitSet, WakeReason, WorkReport,
 };
 
 /// Round-robin selector shared by command, backend, L2, and timer work.
@@ -83,6 +83,13 @@ pub enum RunnerTransition {
         /// A successful completion arrived after cancellation and was suppressed.
         suppressed_completion: bool,
     },
+    /// The backend rejected start or failed during bounded polling.
+    Failed {
+        /// Lossless backend failure.
+        error: BackendError,
+        /// Cancellation had already been requested when the backend failed.
+        cancellation_pending: bool,
+    },
 }
 
 /// Rejection of a deterministic runner transition.
@@ -140,6 +147,20 @@ impl IncrementalRunnerState {
         self.tracker.mark_started(id)?;
         self.wait_for = WaitSet::BACKEND;
         Ok(())
+    }
+
+    /// Terminalize a queued request after [`super::IncrementalWifiBackend::start`] fails.
+    pub fn reject_start(
+        &mut self,
+        id: OperationId,
+        error: BackendError,
+    ) -> Result<RunnerTransition, RunnerStateError> {
+        self.tracker.reject_queued(id)?;
+        self.wait_for = WaitSet::empty();
+        Ok(RunnerTransition::Failed {
+            error,
+            cancellation_pending: false,
+        })
     }
 
     /// Request cancellation without invoking the backend from this state machine.
@@ -237,6 +258,26 @@ impl IncrementalRunnerState {
                 })
             }
         }
+    }
+
+    /// Terminalize an accepted operation after a backend `poll` or `cancel` error.
+    pub fn apply_error(
+        &mut self,
+        expected: OperationId,
+        error: BackendError,
+    ) -> Result<RunnerTransition, RunnerStateError> {
+        if !matches!(
+            self.tracker.lifecycle(expected)?,
+            OperationLifecycle::Started | OperationLifecycle::CancelRequested
+        ) {
+            return Err(OperationStateError::InvalidTransition.into());
+        }
+        let cancellation_pending = self.tracker.commit_terminal(expected)?;
+        self.wait_for = WaitSet::empty();
+        Ok(RunnerTransition::Failed {
+            error,
+            cancellation_pending,
+        })
     }
 
     /// Release a collected terminal result so the slot may be reused.

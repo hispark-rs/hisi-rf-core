@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Added explicit terminal transitions for backend start, poll, and cancellation
+  errors so a failed experimental operation cannot retain the only runner slot.
+  The transition preserves whether cancellation was already pending.
+
 ## [0.1.0-alpha.7] - 2026-07-23
 
 ### Added
