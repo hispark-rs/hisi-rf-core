@@ -10,8 +10,13 @@ use crate::{
     BackendError, ConnectionInfo, ScanConfig, ScanOutcome, ScanResult, StationConfig, WifiConfig,
 };
 
+mod command;
 mod runner;
 
+pub use command::{
+    CommandArbiter, CommandArbiterAction, CommandArbiterError, CommandSequence, PendingCommand,
+    SubmitError,
+};
 pub use runner::{
     CancelDirective, FairWakeSelector, IncrementalRunnerState, RunnerStateError, RunnerStep,
     RunnerTransition,
