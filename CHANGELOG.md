@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a bounded active/pending command arbiter for the future incremental
   runner. Replacement commands request cancellation exactly once, queue overflow
   returns ownership to the caller, and stale operation generations fail closed.
+- Added an executable opt-in backend driver that composes command arbitration,
+  operation generations, fixed work budgets, wake selection, cancellation, and
+  terminal slot recovery without changing the default blocking runner.
 
 ## [0.1.0-alpha.7] - 2026-07-23
 
