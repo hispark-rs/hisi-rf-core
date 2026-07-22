@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-07-22
+
+### Added
+
+- Allocation-free `hisi-rf-error/v1` diagnostics with stable codes, operation
+  stages, recovery actions, documentation anchors, and deterministic JSON.
+- Lossless backend-code preservation without carrying SSIDs, passphrases, key
+  material, or arbitrary backend strings into public diagnostics.
+
 ## [0.1.0-alpha.1] - 2026-07-20
 
 ### Added
@@ -22,5 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit WPA2/WPA3-Personal transition scan classification; callers choose
   PSK or SAE instead of discovery silently downgrading to WPA2.
 
-[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.2...HEAD
+[0.1.0-alpha.2]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/hispark-rs/hisi-rf-core/releases/tag/v0.1.0-alpha.1

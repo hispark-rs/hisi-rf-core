@@ -11,6 +11,11 @@ Chip repositories implement `WifiBackend`; applications drive TCP/IP through
 ROM symbols, schedulers, TLS, NVS formats, and image packaging stay outside this
 crate.
 
+Public errors expose an allocation-free, versioned diagnostic view with stable
+machine codes and recovery actions. The diagnostic schema deliberately excludes
+SSID, passphrase, key material, and arbitrary backend text while preserving a
+lossless numeric backend code.
+
 This crate has no PAC, radio blob, scheduler, allocator, ROM, NVS, TLS, or image
 format dependency. It is an early alpha; the public surface may change while
 the single-dependency facade and WS63 backend are stabilized.

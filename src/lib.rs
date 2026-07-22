@@ -11,9 +11,11 @@
 
 #![no_std]
 
+mod diagnostics;
 mod state;
 mod wifi;
 
+pub use diagnostics::{Diagnostic, DiagnosticCode, DiagnosticStage, RecoveryAction};
 pub use wifi::{
     BackendError, BackendErrorClass, ConnectionInfo, EventDiagnostics, ManagementFrameProtection,
     Passphrase, PersonalSecurity, RadioConfig, RadioController, RadioParts, RadioResources,
