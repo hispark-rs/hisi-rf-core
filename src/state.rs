@@ -14,6 +14,7 @@ pub(crate) struct SharedState<const EVENTS: usize> {
     pub(crate) events: Channel<CriticalSectionRawMutex, WifiEvent, EVENTS>,
     pub(crate) dropped_events: AtomicU32,
     pub(crate) event_high_water: AtomicU32,
+    pub(crate) command_high_water: AtomicU32,
     pub(crate) run_once_calls: AtomicU32,
     pub(crate) commands_processed: AtomicU32,
     pub(crate) backend_poll_calls: AtomicU32,
@@ -40,6 +41,7 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
             events: Channel::new(),
             dropped_events: AtomicU32::new(0),
             event_high_water: AtomicU32::new(0),
+            command_high_water: AtomicU32::new(0),
             run_once_calls: AtomicU32::new(0),
             commands_processed: AtomicU32::new(0),
             backend_poll_calls: AtomicU32::new(0),
@@ -80,6 +82,12 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
     fn record_event_depth(&self) {
         let depth = u32::try_from(self.events.len()).unwrap_or(u32::MAX);
         self.event_high_water.fetch_max(depth, Ordering::Relaxed);
+    }
+
+    pub(crate) fn record_command_accepted(&self) {
+        // The command channel has capacity one. A completed send proves that
+        // its slot was occupied even if the runner receives it immediately.
+        self.command_high_water.fetch_max(1, Ordering::Relaxed);
     }
 }
 

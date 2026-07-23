@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added current and high-water occupancy to blocking-runner diagnostics for
+  the fixed-capacity control command channel.
+
 ## [0.1.0-alpha.12] - 2026-07-23
 
 ### Added

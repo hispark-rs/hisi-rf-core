@@ -410,6 +410,10 @@ pub struct EventDiagnostics {
 /// not be used as synchronization or correctness state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BlockingRunnerDiagnostics {
+    /// Commands currently waiting in the fixed-capacity control channel.
+    pub command_queue_pending: usize,
+    /// Largest observed control-channel occupancy since initialization.
+    pub command_queue_high_water: usize,
     /// Calls to [`RadioRunner::run_once`].
     pub run_once_calls: u32,
     /// Commands processed by either runner entry point.
@@ -572,14 +576,11 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
     /// runner has already received. A later command ignores that stale result.
     pub async fn initialize(&mut self) -> Result<(), Error> {
         let sequence = self.allocate_sequence();
-        self.state
-            .shared
-            .commands
-            .send(Command {
-                sequence,
-                kind: CommandKind::Initialize,
-            })
-            .await;
+        self.send_command(Command {
+            sequence,
+            kind: CommandKind::Initialize,
+        })
+        .await;
         loop {
             let completion = self.state.shared.completion.wait().await;
             if completion.sequence != sequence {
@@ -601,14 +602,11 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
         output: &mut [ScanResult],
     ) -> Result<ScanOutcome, Error> {
         let sequence = self.allocate_sequence();
-        self.state
-            .shared
-            .commands
-            .send(Command {
-                sequence,
-                kind: CommandKind::Scan(config),
-            })
-            .await;
+        self.send_command(Command {
+            sequence,
+            kind: CommandKind::Scan(config),
+        })
+        .await;
         loop {
             let completion = self.state.shared.completion.wait().await;
             if completion.sequence != sequence {
@@ -634,14 +632,11 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
     /// Associate and authorize a station connection.
     pub async fn connect(&mut self, config: StationConfig) -> Result<ConnectionInfo, Error> {
         let sequence = self.allocate_sequence();
-        self.state
-            .shared
-            .commands
-            .send(Command {
-                sequence,
-                kind: CommandKind::Connect(config),
-            })
-            .await;
+        self.send_command(Command {
+            sequence,
+            kind: CommandKind::Connect(config),
+        })
+        .await;
         loop {
             let completion = self.state.shared.completion.wait().await;
             if completion.sequence != sequence {
@@ -659,14 +654,11 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
     /// Disconnect the current station link.
     pub async fn disconnect(&mut self) -> Result<(), Error> {
         let sequence = self.allocate_sequence();
-        self.state
-            .shared
-            .commands
-            .send(Command {
-                sequence,
-                kind: CommandKind::Disconnect,
-            })
-            .await;
+        self.send_command(Command {
+            sequence,
+            kind: CommandKind::Disconnect,
+        })
+        .await;
         loop {
             let completion = self.state.shared.completion.wait().await;
             if completion.sequence != sequence {
@@ -700,6 +692,11 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
     /// Snapshot blocking-runner migration counters.
     pub fn blocking_runner_diagnostics(&self) -> BlockingRunnerDiagnostics {
         BlockingRunnerDiagnostics {
+            command_queue_pending: self.state.shared.commands.len(),
+            command_queue_high_water: usize::try_from(
+                self.state.shared.command_high_water.load(Ordering::Relaxed),
+            )
+            .unwrap_or(usize::MAX),
             run_once_calls: self.state.shared.run_once_calls.load(Ordering::Relaxed),
             commands_processed: self.state.shared.commands_processed.load(Ordering::Relaxed),
             backend_poll_calls: self.state.shared.backend_poll_calls.load(Ordering::Relaxed),
@@ -727,6 +724,11 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
             self.next_sequence = 1;
         }
         self.next_sequence
+    }
+
+    async fn send_command(&self, command: Command) {
+        self.state.shared.commands.send(command).await;
+        self.state.shared.record_command_accepted();
     }
 }
 
@@ -1008,6 +1010,8 @@ mod tests {
         {
             let mut initialize = core::pin::pin!(wifi.controller.initialize());
             assert!(poll(initialize.as_mut()).is_pending());
+            assert_eq!(state.shared.commands.len(), 1);
+            assert_eq!(state.shared.command_high_water.load(Ordering::Relaxed), 1);
             assert!(runner.run_once());
             assert_eq!(poll(initialize.as_mut()), Poll::Ready(Ok(())));
         }
@@ -1158,6 +1162,8 @@ mod tests {
         assert_eq!(
             wifi.controller.blocking_runner_diagnostics(),
             BlockingRunnerDiagnostics {
+                command_queue_pending: 0,
+                command_queue_high_water: 1,
                 run_once_calls: 4,
                 commands_processed: 1,
                 backend_poll_calls: 4,
