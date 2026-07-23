@@ -13,6 +13,13 @@ pub(crate) struct SharedState<const EVENTS: usize> {
     pub(crate) completion: Signal<CriticalSectionRawMutex, Completion>,
     pub(crate) events: Channel<CriticalSectionRawMutex, WifiEvent, EVENTS>,
     pub(crate) dropped_events: AtomicU32,
+    pub(crate) event_high_water: AtomicU32,
+    pub(crate) run_once_calls: AtomicU32,
+    pub(crate) commands_processed: AtomicU32,
+    pub(crate) backend_poll_calls: AtomicU32,
+    pub(crate) backend_poll_work_batches: AtomicU32,
+    pub(crate) backend_poll_errors: AtomicU32,
+    pub(crate) immediate_repoll_hints: AtomicU32,
     scan_results: UnsafeCell<[ScanResult; MAX_SCAN_RESULTS]>,
 }
 
@@ -32,6 +39,13 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
             completion: Signal::new(),
             events: Channel::new(),
             dropped_events: AtomicU32::new(0),
+            event_high_water: AtomicU32::new(0),
+            run_once_calls: AtomicU32::new(0),
+            commands_processed: AtomicU32::new(0),
+            backend_poll_calls: AtomicU32::new(0),
+            backend_poll_work_batches: AtomicU32::new(0),
+            backend_poll_errors: AtomicU32::new(0),
+            immediate_repoll_hints: AtomicU32::new(0),
             scan_results: UnsafeCell::new([ScanResult::EMPTY; MAX_SCAN_RESULTS]),
         }
     }
@@ -54,10 +68,23 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
 
     pub(crate) fn publish_event(&self, event: WifiEvent) {
         if self.events.try_send(event).is_ok() {
+            self.record_event_depth();
             return;
         }
         let _ = self.events.try_receive();
-        self.dropped_events.fetch_add(1, Ordering::Relaxed);
+        saturating_increment(&self.dropped_events);
         let _ = self.events.try_send(event);
+        self.record_event_depth();
     }
+
+    fn record_event_depth(&self) {
+        let depth = u32::try_from(self.events.len()).unwrap_or(u32::MAX);
+        self.event_high_water.fetch_max(depth, Ordering::Relaxed);
+    }
+}
+
+pub(crate) fn saturating_increment(counter: &AtomicU32) {
+    let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+        Some(value.saturating_add(1))
+    });
 }

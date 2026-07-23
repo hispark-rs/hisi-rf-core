@@ -1,6 +1,6 @@
 use portable_atomic::Ordering;
 
-use crate::state::SharedState;
+use crate::state::{SharedState, saturating_increment};
 use crate::{DiagnosticStage, DiagnosticTrace, DiagnosticTraceKind, Error};
 
 pub mod security;
@@ -398,8 +398,30 @@ pub struct EventDiagnostics {
     pub capacity: usize,
     /// Events currently waiting for the controller.
     pub pending: usize,
+    /// Largest observed queue occupancy since initialization.
+    pub high_water: usize,
     /// Oldest events discarded because the queue was full.
     pub dropped: u32,
+}
+
+/// Observational counters for the blocking [`RadioRunner`] path.
+///
+/// Counters saturate at `u32::MAX`. They describe migration workload and must
+/// not be used as synchronization or correctness state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BlockingRunnerDiagnostics {
+    /// Calls to [`RadioRunner::run_once`].
+    pub run_once_calls: u32,
+    /// Commands processed by either runner entry point.
+    pub commands_processed: u32,
+    /// Calls to [`WifiBackend::poll`].
+    pub backend_poll_calls: u32,
+    /// Poll calls that reported useful background work.
+    pub backend_poll_work_batches: u32,
+    /// Poll calls that returned an error, including repeated errors.
+    pub backend_poll_errors: u32,
+    /// `run_once` calls that asked the platform to schedule another batch.
+    pub immediate_repoll_hints: u32,
 }
 
 /// Chip backend driven exclusively by [`RadioRunner`].
@@ -669,7 +691,33 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
         EventDiagnostics {
             capacity: EVENTS,
             pending: self.state.shared.events.len(),
+            high_water: usize::try_from(self.state.shared.event_high_water.load(Ordering::Relaxed))
+                .unwrap_or(usize::MAX),
             dropped: self.state.shared.dropped_events.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Snapshot blocking-runner migration counters.
+    pub fn blocking_runner_diagnostics(&self) -> BlockingRunnerDiagnostics {
+        BlockingRunnerDiagnostics {
+            run_once_calls: self.state.shared.run_once_calls.load(Ordering::Relaxed),
+            commands_processed: self.state.shared.commands_processed.load(Ordering::Relaxed),
+            backend_poll_calls: self.state.shared.backend_poll_calls.load(Ordering::Relaxed),
+            backend_poll_work_batches: self
+                .state
+                .shared
+                .backend_poll_work_batches
+                .load(Ordering::Relaxed),
+            backend_poll_errors: self
+                .state
+                .shared
+                .backend_poll_errors
+                .load(Ordering::Relaxed),
+            immediate_repoll_hints: self
+                .state
+                .shared
+                .immediate_repoll_hints
+                .load(Ordering::Relaxed),
         }
     }
 
@@ -698,17 +746,23 @@ impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
     /// A thread-based runner must yield or otherwise provide a scheduling point
     /// between calls.
     pub fn run_once(&mut self) -> bool {
+        saturating_increment(&self.state.shared.run_once_calls);
         let mut did_work = false;
         if let Ok(command) = self.state.shared.commands.try_receive() {
             self.process_command(command);
             did_work = true;
         }
-        match self.backend.poll() {
+        saturating_increment(&self.state.shared.backend_poll_calls);
+        let immediate_repoll = match self.backend.poll() {
             Ok(background_work) => {
                 self.last_poll_error = None;
+                if background_work {
+                    saturating_increment(&self.state.shared.backend_poll_work_batches);
+                }
                 did_work || background_work
             }
             Err(error) => {
+                saturating_increment(&self.state.shared.backend_poll_errors);
                 if self.last_poll_error != Some(error) {
                     self.state.shared.publish_event(WifiEvent::Failed(error));
                     self.last_poll_error = Some(error);
@@ -717,7 +771,11 @@ impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
                     did_work
                 }
             }
+        };
+        if immediate_repoll {
+            saturating_increment(&self.state.shared.immediate_repoll_hints);
         }
+        immediate_repoll
     }
 
     /// Run forever for command-driven backends.
@@ -733,6 +791,7 @@ impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
     }
 
     fn process_command(&mut self, command: Command) {
+        saturating_increment(&self.state.shared.commands_processed);
         let sequence = command.sequence;
         let completion = match command.kind {
             CommandKind::Initialize => {
@@ -1000,6 +1059,7 @@ mod tests {
             EventDiagnostics {
                 capacity: 1,
                 pending: 1,
+                high_water: 1,
                 dropped: 1,
             }
         );
@@ -1054,11 +1114,58 @@ mod tests {
             EventDiagnostics {
                 capacity: 2,
                 pending: 1,
+                high_water: 1,
                 dropped: 0,
             }
         );
         let mut event = core::pin::pin!(wifi.controller.next_event());
         assert_eq!(poll(event.as_mut()), Poll::Ready(WifiEvent::Failed(error)));
+    }
+
+    #[test]
+    fn blocking_runner_diagnostics_count_bounded_work() {
+        let state = Box::leak(Box::new(RadioState::<2>::new()));
+        let error = BackendError::new(BackendErrorClass::Other, 0x55);
+        let radio = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: MockBackend {
+                    poll_work: true,
+                    ..MockBackend::default()
+                },
+                device: (),
+            },
+            state,
+        )
+        .unwrap();
+        let RadioParts {
+            mut wifi,
+            mut runner,
+        } = radio.split();
+
+        {
+            let mut initialize = core::pin::pin!(wifi.controller.initialize());
+            assert!(poll(initialize.as_mut()).is_pending());
+            assert!(runner.run_once());
+            assert_eq!(poll(initialize.as_mut()), Poll::Ready(Ok(())));
+        }
+        assert!(!runner.run_once());
+
+        runner.backend.poll_error = Some(error);
+        assert!(runner.run_once());
+        assert!(!runner.run_once());
+
+        assert_eq!(
+            wifi.controller.blocking_runner_diagnostics(),
+            BlockingRunnerDiagnostics {
+                run_once_calls: 4,
+                commands_processed: 1,
+                backend_poll_calls: 4,
+                backend_poll_work_batches: 1,
+                backend_poll_errors: 2,
+                immediate_repoll_hints: 2,
+            }
+        );
     }
 
     #[test]

@@ -33,10 +33,11 @@ pub use incremental::{
     WorkReport,
 };
 pub use wifi::{
-    BackendError, BackendErrorClass, ConnectionInfo, EventDiagnostics, ManagementFrameProtection,
-    Passphrase, PersonalSecurity, RadioConfig, RadioController, RadioParts, RadioResources,
-    RadioRunner, RadioState, SaePwe, ScanConfig, ScanOutcome, ScanResult, Security, Ssid,
-    StationConfig, WifiBackend, WifiConfig, WifiController, WifiDevice, WifiEvent, WifiParts, init,
+    BackendError, BackendErrorClass, BlockingRunnerDiagnostics, ConnectionInfo, EventDiagnostics,
+    ManagementFrameProtection, Passphrase, PersonalSecurity, RadioConfig, RadioController,
+    RadioParts, RadioResources, RadioRunner, RadioState, SaePwe, ScanConfig, ScanOutcome,
+    ScanResult, Security, Ssid, StationConfig, WifiBackend, WifiConfig, WifiController, WifiDevice,
+    WifiEvent, WifiParts, init,
 };
 
 /// Failure to establish or use the radio control plane.
