@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.14] - 2026-07-26
+
+### Added
+
+- Added saturating diagnostics for the opt-in incremental runner, including
+  bounded runner steps, wait completions, wake-source batches, work-budget
+  exhaustion, terminal outcomes, and fail-closed driver/protocol errors.
+
+### Changed
+
+- Raised the declared MSRV to Rust 1.91, matching the optional smoltcp 0.13
+  dependency and the ecosystem's official pinned toolchain contract.
+
 ## [0.1.0-alpha.13] - 2026-07-23
 
 ### Added

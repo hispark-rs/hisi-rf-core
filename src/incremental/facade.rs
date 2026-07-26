@@ -1,4 +1,4 @@
-use core::{future::poll_fn, task::Poll};
+use core::{cell::Cell, future::poll_fn, task::Poll};
 
 use crate::wifi::{Command, CommandKind, Completion, CompletionKind};
 use crate::{
@@ -14,6 +14,120 @@ use super::{
 
 // A runner-local cancellation has no chip/backend status code to preserve.
 const RUNNER_CANCELLED_CODE: u32 = 0;
+
+/// Observational counters for the opt-in incremental runner.
+///
+/// Counters saturate at `u32::MAX`. They are intentionally local to the unique
+/// runner and never participate in scheduling, wake delivery, or correctness.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IncrementalRunnerDiagnostics {
+    /// Calls to [`IncrementalRadioRunner::run_once`].
+    pub run_once_calls: u32,
+    /// Calls that supplied command readiness.
+    pub command_ready_batches: u32,
+    /// Calls that supplied backend readiness.
+    pub backend_ready_batches: u32,
+    /// Calls that supplied L2 RX readiness.
+    pub l2_rx_ready_batches: u32,
+    /// Calls that supplied timer readiness.
+    pub timer_ready_batches: u32,
+    /// Wait futures that were first polled.
+    pub wait_ready_calls: u32,
+    /// Wait futures that returned a ready set.
+    pub wait_ready_completions: u32,
+    /// Wait futures that returned without an external wake because work was
+    /// already runnable.
+    pub immediate_ready_completions: u32,
+    /// Wait futures that failed closed.
+    pub wait_ready_errors: u32,
+    /// Backend operations accepted by the incremental driver.
+    pub operations_started: u32,
+    /// Cancellation requests delivered to the backend.
+    pub cancellations_requested: u32,
+    /// Polls that remained pending within their work grant.
+    pub pending_polls: u32,
+    /// Polls that consumed their complete work grant.
+    pub budget_exhaustions: u32,
+    /// Operations that completed successfully.
+    pub operations_completed: u32,
+    /// Operations that reached cancelled terminal state.
+    pub operations_cancelled: u32,
+    /// Operations that reached failed terminal state.
+    pub operations_failed: u32,
+    /// Internal driver transition failures.
+    pub driver_errors: u32,
+    /// Facade publication or command-ledger failures.
+    pub protocol_errors: u32,
+}
+
+impl IncrementalRunnerDiagnostics {
+    const EMPTY: Self = Self {
+        run_once_calls: 0,
+        command_ready_batches: 0,
+        backend_ready_batches: 0,
+        l2_rx_ready_batches: 0,
+        timer_ready_batches: 0,
+        wait_ready_calls: 0,
+        wait_ready_completions: 0,
+        immediate_ready_completions: 0,
+        wait_ready_errors: 0,
+        operations_started: 0,
+        cancellations_requested: 0,
+        pending_polls: 0,
+        budget_exhaustions: 0,
+        operations_completed: 0,
+        operations_cancelled: 0,
+        operations_failed: 0,
+        driver_errors: 0,
+        protocol_errors: 0,
+    };
+
+    fn increment(counter: &mut u32) {
+        *counter = counter.saturating_add(1);
+    }
+
+    fn record_ready(&mut self, ready: WaitSet) {
+        if ready.contains(WaitSet::COMMAND) {
+            Self::increment(&mut self.command_ready_batches);
+        }
+        if ready.contains(WaitSet::BACKEND) {
+            Self::increment(&mut self.backend_ready_batches);
+        }
+        if ready.contains(WaitSet::L2_RX) {
+            Self::increment(&mut self.l2_rx_ready_batches);
+        }
+        if ready.contains(WaitSet::TIMER) {
+            Self::increment(&mut self.timer_ready_batches);
+        }
+    }
+
+    fn record_event(&mut self, event: IncrementalDriverEvent) {
+        match event {
+            IncrementalDriverEvent::Started { .. } => {
+                Self::increment(&mut self.operations_started);
+            }
+            IncrementalDriverEvent::CancelRequested { .. } => {
+                Self::increment(&mut self.cancellations_requested);
+            }
+            IncrementalDriverEvent::Pending { .. } => {
+                Self::increment(&mut self.pending_polls);
+            }
+            IncrementalDriverEvent::BudgetExhausted { .. } => {
+                Self::increment(&mut self.budget_exhaustions);
+            }
+            IncrementalDriverEvent::Completed { .. } => {
+                Self::increment(&mut self.operations_completed);
+            }
+            IncrementalDriverEvent::Cancelled { .. } => {
+                Self::increment(&mut self.operations_cancelled);
+            }
+            IncrementalDriverEvent::Failed { .. } => {
+                Self::increment(&mut self.operations_failed);
+            }
+            IncrementalDriverEvent::Idle | IncrementalDriverEvent::Waiting { .. } => {}
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CommandKindTag {
@@ -109,6 +223,7 @@ impl<B: IncrementalWifiBackend, D, const EVENTS: usize> RadioController<B, D, EV
                 config,
                 state,
                 ledger: CommandLedger::new(),
+                diagnostics: Cell::new(IncrementalRunnerDiagnostics::EMPTY),
             },
         }
     }
@@ -120,6 +235,7 @@ pub struct IncrementalRadioRunner<B, const EVENTS: usize> {
     config: WifiConfig,
     state: &'static RadioState<EVENTS>,
     ledger: CommandLedger,
+    diagnostics: Cell<IncrementalRunnerDiagnostics>,
 }
 
 impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, EVENTS> {
@@ -128,18 +244,43 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
         &mut self,
         ready: WaitSet,
     ) -> Result<IncrementalDriverEvent, IncrementalRadioRunnerError> {
-        if self.driver.can_submit() {
-            if let Ok(command) = self.state.shared.commands.try_receive() {
-                self.submit_command(command)?;
-            }
+        let mut diagnostics = self.diagnostics.get();
+        IncrementalRunnerDiagnostics::increment(&mut diagnostics.run_once_calls);
+        diagnostics.record_ready(ready);
+        self.diagnostics.set(diagnostics);
+
+        if self.driver.can_submit()
+            && let Ok(command) = self.state.shared.commands.try_receive()
+            && let Err(error) = self.submit_command(command)
+        {
+            let mut diagnostics = self.diagnostics.get();
+            IncrementalRunnerDiagnostics::increment(&mut diagnostics.protocol_errors);
+            self.diagnostics.set(diagnostics);
+            return Err(error);
         }
 
         // SAFETY: this unique runner is the only writer. A terminal scan
         // completion is signalled only after `drive_once` returns and releases
         // the mutable borrow, matching the blocking runner's ownership rule.
         let scan_output = unsafe { &mut *self.state.shared.scan_results_ptr() };
-        let event = self.driver.drive_once(ready, scan_output)?;
-        self.publish_terminal(event)?;
+        let event = match self.driver.drive_once(ready, scan_output) {
+            Ok(event) => event,
+            Err(error) => {
+                let mut diagnostics = self.diagnostics.get();
+                IncrementalRunnerDiagnostics::increment(&mut diagnostics.driver_errors);
+                self.diagnostics.set(diagnostics);
+                return Err(error.into());
+            }
+        };
+        let mut diagnostics = self.diagnostics.get();
+        diagnostics.record_event(event);
+        self.diagnostics.set(diagnostics);
+        if let Err(error) = self.publish_terminal(event) {
+            let mut diagnostics = self.diagnostics.get();
+            IncrementalRunnerDiagnostics::increment(&mut diagnostics.protocol_errors);
+            self.diagnostics.set(diagnostics);
+            return Err(error);
+        }
         Ok(event)
     }
 
@@ -179,7 +320,11 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
         &self,
         platform: &mut P,
     ) -> Result<WaitSet, IncrementalWaitError<P::Error>> {
-        poll_fn(|cx| {
+        let mut diagnostics = self.diagnostics.get();
+        IncrementalRunnerDiagnostics::increment(&mut diagnostics.wait_ready_calls);
+        self.diagnostics.set(diagnostics);
+
+        let result = poll_fn(|cx| {
             let intent = self.wait_intent();
             if intent.run_immediately() {
                 return Poll::Ready(Ok(WaitSet::empty()));
@@ -223,7 +368,30 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
                 Poll::Ready(Ok(ready))
             }
         })
-        .await
+        .await;
+
+        let mut diagnostics = self.diagnostics.get();
+        match result {
+            Ok(ready) => {
+                IncrementalRunnerDiagnostics::increment(&mut diagnostics.wait_ready_completions);
+                if ready.is_empty() {
+                    IncrementalRunnerDiagnostics::increment(
+                        &mut diagnostics.immediate_ready_completions,
+                    );
+                }
+                diagnostics.record_ready(ready);
+            }
+            Err(_) => {
+                IncrementalRunnerDiagnostics::increment(&mut diagnostics.wait_ready_errors);
+            }
+        }
+        self.diagnostics.set(diagnostics);
+        result
+    }
+
+    /// Snapshot opt-in runner workload and wake-source counters.
+    pub fn diagnostics(&self) -> IncrementalRunnerDiagnostics {
+        self.diagnostics.get()
     }
 
     /// Borrow the chip backend for platform wake registration and diagnostics.
@@ -564,6 +732,19 @@ mod tests {
             IncrementalDriverEvent::Completed { .. }
         ));
         assert_eq!(poll(initialize.as_mut()), Poll::Ready(Ok(())));
+        assert_eq!(
+            runner.diagnostics(),
+            IncrementalRunnerDiagnostics {
+                run_once_calls: 2,
+                timer_ready_batches: 2,
+                wait_ready_calls: 2,
+                wait_ready_completions: 2,
+                immediate_ready_completions: 1,
+                operations_started: 1,
+                operations_completed: 1,
+                ..IncrementalRunnerDiagnostics::EMPTY
+            }
+        );
     }
 
     #[test]
@@ -612,6 +793,20 @@ mod tests {
                 }))
             );
         }
+        assert_eq!(runner.diagnostics().wait_ready_calls, 2);
+        assert_eq!(runner.diagnostics().wait_ready_errors, 2);
+        assert_eq!(runner.diagnostics().wait_ready_completions, 0);
+    }
+
+    #[test]
+    fn incremental_diagnostic_counters_saturate() {
+        let mut diagnostics = IncrementalRunnerDiagnostics::EMPTY;
+        diagnostics.run_once_calls = u32::MAX;
+        diagnostics.command_ready_batches = u32::MAX;
+        IncrementalRunnerDiagnostics::increment(&mut diagnostics.run_once_calls);
+        diagnostics.record_ready(WaitSet::COMMAND);
+        assert_eq!(diagnostics.run_once_calls, u32::MAX);
+        assert_eq!(diagnostics.command_ready_batches, u32::MAX);
     }
 
     #[test]

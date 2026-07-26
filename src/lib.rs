@@ -26,11 +26,11 @@ pub use incremental::{
     CancelDirective, CancelOutcome, CommandArbiter, CommandArbiterAction, CommandArbiterError,
     CommandSequence, FairWakeSelector, IncrementalBackendDriver, IncrementalCompletion,
     IncrementalDriverError, IncrementalDriverEvent, IncrementalRadioParts, IncrementalRadioRunner,
-    IncrementalRadioRunnerError, IncrementalRequest, IncrementalRunnerState, IncrementalWaitError,
-    IncrementalWaitIntent, IncrementalWaitPlatform, IncrementalWifiBackend, OperationId,
-    OperationLifecycle, OperationStateError, OperationTracker, PendingCommand, PollDisposition,
-    RunnerStateError, RunnerStep, RunnerTransition, SubmitError, WaitSet, WakeReason, WorkBudget,
-    WorkReport,
+    IncrementalRadioRunnerError, IncrementalRequest, IncrementalRunnerDiagnostics,
+    IncrementalRunnerState, IncrementalWaitError, IncrementalWaitIntent, IncrementalWaitPlatform,
+    IncrementalWifiBackend, OperationId, OperationLifecycle, OperationStateError, OperationTracker,
+    PendingCommand, PollDisposition, RunnerStateError, RunnerStep, RunnerTransition, SubmitError,
+    WaitSet, WakeReason, WorkBudget, WorkReport,
 };
 pub use wifi::{
     BackendError, BackendErrorClass, BlockingRunnerDiagnostics, ConnectionInfo, EventDiagnostics,

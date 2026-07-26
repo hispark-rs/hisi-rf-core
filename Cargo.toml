@@ -1,8 +1,8 @@
 [package]
 name = "hisi-rf-core"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.14"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.91"
 authors = ["sanchuanhehe"]
 license = "MIT"
 description = "Chip-neutral async radio controller contracts for HiSilicon embedded Rust"

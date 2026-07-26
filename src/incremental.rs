@@ -25,7 +25,10 @@ pub use command::{
 pub use driver::{
     IncrementalBackendDriver, IncrementalDriverError, IncrementalDriverEvent, IncrementalWaitIntent,
 };
-pub use facade::{IncrementalRadioParts, IncrementalRadioRunner, IncrementalRadioRunnerError};
+pub use facade::{
+    IncrementalRadioParts, IncrementalRadioRunner, IncrementalRadioRunnerError,
+    IncrementalRunnerDiagnostics,
+};
 pub use runner::{
     CancelDirective, FairWakeSelector, IncrementalRunnerState, RunnerStateError, RunnerStep,
     RunnerTransition,
