@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve an incremental backend's immediate local continuation when an
+  operation also has a terminal deadline. Adding the timer wake source no
+  longer masks an empty backend wait set and delays owned work until timeout.
+
 ## [0.1.0-alpha.14] - 2026-07-26
 
 ### Added

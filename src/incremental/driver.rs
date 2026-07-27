@@ -182,13 +182,17 @@ impl<B: IncrementalWifiBackend> IncrementalBackendDriver<B> {
     /// on unrelated traffic.
     pub fn wait_intent(&self) -> IncrementalWaitIntent {
         let deadline_us = self.next_deadline_us();
-        let mut sources = self.runner.wait_for();
+        let backend_sources = self.runner.wait_for();
+        let mut sources = backend_sources;
         if deadline_us.is_some() {
             sources = sources.union(WaitSet::TIMER);
         }
         let run_immediately = match self.arbiter.action() {
             CommandArbiterAction::Idle => false,
-            CommandArbiterAction::WaitActive(_) => sources.is_empty(),
+            // An empty backend wait set means locally-owned work remains.
+            // Preserve that continuation even when a terminal deadline also
+            // adds TIMER to the externally visible subscription.
+            CommandArbiterAction::WaitActive(_) => backend_sources.is_empty(),
             CommandArbiterAction::StartPending(_)
             | CommandArbiterAction::Starting(_)
             | CommandArbiterAction::CancelActive(_) => true,
@@ -529,6 +533,27 @@ mod tests {
         assert_eq!(intent.deadline_us(), Some(42));
         assert_eq!(intent.sources(), WaitSet::BACKEND.union(WaitSet::TIMER));
         assert!(!intent.run_immediately());
+    }
+
+    #[test]
+    fn local_continuation_remains_immediate_when_a_deadline_exists() {
+        let mut backend = FakeBackend::complete(IncrementalCompletion::Initialized);
+        backend.poll_behavior = PollBehavior::Pending(WaitSet::empty());
+        let mut driver = IncrementalBackendDriver::new(backend, budget());
+        let mut output = empty_scan_output();
+        driver
+            .submit(
+                command_sequence(1),
+                IncrementalRequest::Initialize(WifiConfig::default()),
+            )
+            .unwrap();
+        let _ = driver.drive_once(WaitSet::empty(), &mut output).unwrap();
+        let _ = driver.drive_once(WaitSet::BACKEND, &mut output).unwrap();
+
+        let intent = driver.wait_intent();
+        assert_eq!(intent.deadline_us(), Some(42));
+        assert_eq!(intent.sources(), WaitSet::TIMER);
+        assert!(intent.run_immediately());
     }
 
     #[test]
