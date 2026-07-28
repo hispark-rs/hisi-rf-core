@@ -259,11 +259,30 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
             return Err(error);
         }
 
+        if let Ok(raw_sequence) = self.state.shared.cancellations.try_receive() {
+            let Some(sequence) = CommandSequence::try_from_raw(raw_sequence) else {
+                let mut diagnostics = self.diagnostics.get();
+                IncrementalRunnerDiagnostics::increment(&mut diagnostics.protocol_errors);
+                self.diagnostics.set(diagnostics);
+                return Err(IncrementalRadioRunnerError::InvalidCommandSequence);
+            };
+            if let Some(event) = self.driver.request_cancel(sequence)? {
+                let mut diagnostics = self.diagnostics.get();
+                diagnostics.record_event(event);
+                self.diagnostics.set(diagnostics);
+                self.publish_terminal(event)?;
+                return Ok(event);
+            }
+        }
+
         // SAFETY: this unique runner is the only writer. A terminal scan
         // completion is signalled only after `drive_once` returns and releases
         // the mutable borrow, matching the blocking runner's ownership rule.
         let scan_output = unsafe { &mut *self.state.shared.scan_results_ptr() };
-        let event = match self.driver.drive_once(ready, scan_output) {
+        let event = match self
+            .driver
+            .drive_once(ready.without(WaitSet::CANCEL), scan_output)
+        {
             Ok(event) => event,
             Err(error) => {
                 let mut diagnostics = self.diagnostics.get();
@@ -295,11 +314,12 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
     /// another request. A queued command makes the intent immediately runnable.
     pub fn wait_intent(&self) -> IncrementalWaitIntent {
         let intent = self.driver.wait_intent();
-        if self.driver.can_submit() {
+        let intent = if self.driver.can_submit() {
             intent.with_command(!self.state.shared.commands.is_empty())
         } else {
             intent
-        }
+        };
+        intent.with_cancellation(!self.state.shared.cancellations.is_empty())
     }
 
     /// Wait until the controller command channel is non-empty without consuming it.
@@ -327,6 +347,9 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
         let result = poll_fn(|cx| {
             let intent = self.wait_intent();
             if intent.run_immediately() {
+                if !self.state.shared.cancellations.is_empty() {
+                    return Poll::Ready(Ok(WaitSet::CANCEL));
+                }
                 return Poll::Ready(Ok(WaitSet::empty()));
             }
 
@@ -342,8 +365,20 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
             {
                 ready = ready.union(WaitSet::COMMAND);
             }
+            if subscribed.contains(WaitSet::CANCEL)
+                && self
+                    .state
+                    .shared
+                    .cancellations
+                    .poll_ready_to_receive(cx)
+                    .is_ready()
+            {
+                ready = ready.union(WaitSet::CANCEL);
+            }
 
-            let platform_sources = subscribed.without(WaitSet::COMMAND);
+            let platform_sources = subscribed
+                .without(WaitSet::COMMAND)
+                .without(WaitSet::CANCEL);
             if !platform_sources.is_empty() {
                 match platform.poll_ready(cx, platform_sources, intent.deadline_us()) {
                     Poll::Pending => {}
@@ -859,7 +894,7 @@ mod tests {
         } = radio.split_incremental(budget());
 
         let idle = runner.wait_intent();
-        assert_eq!(idle.sources(), WaitSet::COMMAND);
+        assert_eq!(idle.sources(), WaitSet::COMMAND.union(WaitSet::CANCEL));
         assert_eq!(idle.deadline_us(), None);
         assert!(!idle.run_immediately());
 
@@ -871,7 +906,10 @@ mod tests {
                 runner.run_once(WaitSet::empty()).unwrap(),
                 IncrementalDriverEvent::Started { .. }
             ));
-            assert_eq!(runner.wait_intent().sources(), WaitSet::COMMAND);
+            assert_eq!(
+                runner.wait_intent().sources(),
+                WaitSet::COMMAND.union(WaitSet::CANCEL)
+            );
             assert!(runner.wait_intent().run_immediately());
             assert!(matches!(
                 runner.run_once(WaitSet::empty()).unwrap(),
@@ -886,7 +924,7 @@ mod tests {
         let mut results = [ScanResult::empty(); 1];
         {
             let mut scan = core::pin::pin!(wifi.controller.scan(
-                ScanConfig::try_from_timeout_ms(1_000).unwrap(),
+                ScanConfig::new(crate::OperationTimeout::try_from_millis(1_000).unwrap()),
                 &mut results,
             ));
             assert!(poll(scan.as_mut()).is_pending());
@@ -949,6 +987,79 @@ mod tests {
     }
 
     #[test]
+    fn dropped_future_requests_cancellation_without_a_replacement() {
+        let state = Box::leak(Box::new(RadioState::<4>::new()));
+        let radio = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: FakeBackend::new(),
+                device: (),
+            },
+            state,
+        )
+        .unwrap();
+        let IncrementalRadioParts {
+            mut wifi,
+            mut runner,
+        } = radio.split_incremental(budget());
+
+        {
+            let mut abandoned = core::pin::pin!(wifi.controller.initialize());
+            assert!(poll(abandoned.as_mut()).is_pending());
+            assert!(matches!(
+                runner.run_once(WaitSet::empty()).unwrap(),
+                IncrementalDriverEvent::Started { .. }
+            ));
+        }
+
+        assert!(runner.wait_intent().run_immediately());
+        assert!(matches!(
+            runner.run_once(WaitSet::empty()).unwrap(),
+            IncrementalDriverEvent::CancelRequested { .. }
+        ));
+        assert_eq!(runner.backend().cancel_calls, 1);
+        assert!(matches!(
+            runner.run_once(WaitSet::BACKEND).unwrap(),
+            IncrementalDriverEvent::Cancelled {
+                suppressed_completion: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn dropped_future_wakes_the_unified_wait_for_cancellation() {
+        let state = Box::leak(Box::new(RadioState::<4>::new()));
+        let radio = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: FakeBackend::pending_once(),
+                device: (),
+            },
+            state,
+        )
+        .unwrap();
+        let IncrementalRadioParts { mut wifi, runner } = radio.split_incremental(budget());
+        let mut runner = runner;
+        let mut initialize = Box::pin(wifi.controller.initialize());
+        assert!(poll(initialize.as_mut()).is_pending());
+        assert!(matches!(
+            runner.run_once(WaitSet::empty()).unwrap(),
+            IncrementalDriverEvent::Started { .. }
+        ));
+        assert!(matches!(
+            runner.run_once(WaitSet::empty()).unwrap(),
+            IncrementalDriverEvent::Pending { .. }
+        ));
+
+        let mut platform = FakeWaitPlatform::default();
+        let mut wait = Box::pin(runner.wait_ready(&mut platform));
+        assert!(poll(wait.as_mut()).is_pending());
+        drop(initialize);
+        assert_eq!(poll(wait.as_mut()), Poll::Ready(Ok(WaitSet::CANCEL)));
+    }
+
+    #[test]
     fn queued_replacement_waits_for_pending_capacity() {
         let state = Box::leak(Box::new(RadioState::<4>::new()));
         let radio = init(
@@ -973,7 +1084,7 @@ mod tests {
         let mut scan_results = [ScanResult::empty(); 1];
         {
             let mut second = core::pin::pin!(wifi.controller.scan(
-                ScanConfig::try_from_timeout_ms(1_000).unwrap(),
+                ScanConfig::new(crate::OperationTimeout::try_from_millis(1_000).unwrap()),
                 &mut scan_results,
             ));
             assert!(poll(second.as_mut()).is_pending());
@@ -987,7 +1098,7 @@ mod tests {
         assert!(poll(third.as_mut()).is_pending());
 
         let backpressured = runner.wait_intent();
-        assert_eq!(backpressured.sources(), WaitSet::empty());
+        assert_eq!(backpressured.sources(), WaitSet::CANCEL);
         assert!(!backpressured.sources().contains(WaitSet::COMMAND));
         assert!(backpressured.run_immediately());
 
@@ -998,17 +1109,7 @@ mod tests {
             IncrementalDriverEvent::Cancelled { .. }
         ));
         assert!(runner.wait_intent().run_immediately());
-        assert!(!runner.wait_intent().sources().contains(WaitSet::COMMAND));
-        assert!(matches!(
-            runner.run_once(WaitSet::empty()).unwrap(),
-            IncrementalDriverEvent::Started { .. }
-        ));
         assert!(runner.wait_intent().sources().contains(WaitSet::COMMAND));
-        assert!(runner.wait_intent().run_immediately());
-        assert!(matches!(
-            runner.run_once(WaitSet::empty()).unwrap(),
-            IncrementalDriverEvent::CancelRequested { .. }
-        ));
         assert!(matches!(
             runner.run_once(WaitSet::empty()).unwrap(),
             IncrementalDriverEvent::Cancelled { .. }
@@ -1017,7 +1118,15 @@ mod tests {
             runner.run_once(WaitSet::empty()).unwrap(),
             IncrementalDriverEvent::Started { .. }
         ));
-        let _ = runner.run_once(WaitSet::BACKEND).unwrap();
+        assert!(runner.wait_intent().sources().contains(WaitSet::COMMAND));
+        assert!(runner.wait_intent().run_immediately());
+        assert!(matches!(
+            runner.run_once(WaitSet::empty()).unwrap(),
+            IncrementalDriverEvent::Completed {
+                completion: IncrementalCompletion::Disconnected,
+                ..
+            }
+        ));
         assert_eq!(poll(third.as_mut()), Poll::Ready(Ok(())));
     }
 

@@ -269,6 +269,8 @@ impl WaitSet {
     pub const L2_RX: Self = Self(1 << 2);
     /// The next backend deadline elapsed.
     pub const TIMER: Self = Self(1 << 3);
+    /// A dropped control future requested cancellation.
+    pub const CANCEL: Self = Self(1 << 4);
 
     /// An empty set, used when another poll should happen immediately.
     pub const fn empty() -> Self {

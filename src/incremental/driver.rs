@@ -1,5 +1,6 @@
 use crate::{BackendError, ScanResult};
 
+use super::command::CancelArbiterAction;
 use super::{
     CancelDirective, CommandArbiter, CommandArbiterAction, CommandArbiterError, CommandSequence,
     IncrementalCompletion, IncrementalRequest, IncrementalRunnerState, IncrementalWifiBackend,
@@ -133,6 +134,12 @@ impl IncrementalWaitIntent {
         self.run_immediately |= ready;
         self
     }
+
+    pub(super) const fn with_cancellation(mut self, ready: bool) -> Self {
+        self.sources = self.sources.union(WaitSet::CANCEL);
+        self.run_immediately |= ready;
+        self
+    }
 }
 
 /// Executable, deterministic composition of the A5B incremental contracts.
@@ -173,6 +180,25 @@ impl<B: IncrementalWifiBackend> IncrementalBackendDriver<B> {
     /// Whether the bounded command arbiter can retain one more request.
     pub const fn can_submit(&self) -> bool {
         self.arbiter.can_submit()
+    }
+
+    /// Request cancellation by controller sequence.
+    ///
+    /// An active operation moves to the ordinary backend cancellation path. A
+    /// request that has not started is removed locally and returned as a
+    /// terminal cancellation event.
+    pub fn request_cancel(
+        &mut self,
+        sequence: CommandSequence,
+    ) -> Result<Option<IncrementalDriverEvent>, IncrementalDriverError> {
+        match self.arbiter.request_cancel(sequence) {
+            CancelArbiterAction::RequestActive => Ok(None),
+            CancelArbiterAction::RemovePending => Ok(Some(IncrementalDriverEvent::Cancelled {
+                sequence,
+                suppressed_completion: false,
+            })),
+            CancelArbiterAction::AlreadyRequested | CancelArbiterAction::NotFound => Ok(None),
+        }
     }
 
     /// Snapshot the backend-side wait contract after the latest transition.
@@ -676,7 +702,7 @@ mod tests {
 
     #[test]
     fn poll_error_is_terminal_and_does_not_poison_reuse() {
-        let backend_error = error(BackendErrorClass::Timeout, 9);
+        let backend_error = error(BackendErrorClass::BackendTimeout, 9);
         let backend = FakeBackend {
             fail_next_start: false,
             cancel_error: None,

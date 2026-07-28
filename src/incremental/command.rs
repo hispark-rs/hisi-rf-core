@@ -94,7 +94,16 @@ pub enum CommandArbiterAction {
 struct ActiveCommand {
     sequence: CommandSequence,
     operation: OperationId,
+    cancel_intent: bool,
     cancel_requested: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum CancelArbiterAction {
+    RequestActive,
+    RemovePending,
+    AlreadyRequested,
+    NotFound,
 }
 
 /// Bounded active/pending command ownership for the incremental runner.
@@ -143,7 +152,7 @@ impl<C> CommandArbiter<C> {
     /// Select the next control-plane action.
     pub fn action(&self) -> CommandArbiterAction {
         if let Some(active) = self.active {
-            if self.pending.is_some() && !active.cancel_requested {
+            if (self.pending.is_some() || active.cancel_intent) && !active.cancel_requested {
                 CommandArbiterAction::CancelActive(active.operation)
             } else {
                 CommandArbiterAction::WaitActive(active.operation)
@@ -183,9 +192,27 @@ impl<C> CommandArbiter<C> {
         self.active = Some(ActiveCommand {
             sequence,
             operation,
+            cancel_intent: false,
             cancel_requested: false,
         });
         Ok(())
+    }
+
+    pub(super) fn request_cancel(&mut self, sequence: CommandSequence) -> CancelArbiterAction {
+        if let Some(active) = self.active.as_mut()
+            && active.sequence == sequence
+        {
+            if active.cancel_requested || active.cancel_intent {
+                return CancelArbiterAction::AlreadyRequested;
+            }
+            active.cancel_intent = true;
+            return CancelArbiterAction::RequestActive;
+        }
+        if self.pending_sequence() == Some(sequence) {
+            self.pending = None;
+            return CancelArbiterAction::RemovePending;
+        }
+        CancelArbiterAction::NotFound
     }
 
     /// Clear a failed backend start so another pending command may proceed.

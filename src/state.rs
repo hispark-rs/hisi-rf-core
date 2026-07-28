@@ -10,6 +10,7 @@ use crate::wifi::{Command, Completion, MAX_SCAN_RESULTS, ScanResult, WifiEvent};
 pub(crate) struct SharedState<const EVENTS: usize> {
     claimed: AtomicBool,
     pub(crate) commands: Channel<CriticalSectionRawMutex, Command, 1>,
+    pub(crate) cancellations: Channel<CriticalSectionRawMutex, u32, 3>,
     pub(crate) completion: Signal<CriticalSectionRawMutex, Completion>,
     pub(crate) events: Channel<CriticalSectionRawMutex, WifiEvent, EVENTS>,
     pub(crate) dropped_events: AtomicU32,
@@ -37,6 +38,7 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
         Self {
             claimed: AtomicBool::new(false),
             commands: Channel::new(),
+            cancellations: Channel::new(),
             completion: Signal::new(),
             events: Channel::new(),
             dropped_events: AtomicU32::new(0),

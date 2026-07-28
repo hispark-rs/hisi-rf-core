@@ -1,12 +1,13 @@
 pub mod hisi_rf_core
 pub enum hisi_rf_core::BackendErrorClass
+pub hisi_rf_core::BackendErrorClass::BackendTimeout
 pub hisi_rf_core::BackendErrorClass::Busy
 pub hisi_rf_core::BackendErrorClass::Cancelled
 pub hisi_rf_core::BackendErrorClass::Connect
 pub hisi_rf_core::BackendErrorClass::Initialize
+pub hisi_rf_core::BackendErrorClass::OperationTimeout
 pub hisi_rf_core::BackendErrorClass::Other
 pub hisi_rf_core::BackendErrorClass::ResourceUnavailable
-pub hisi_rf_core::BackendErrorClass::Timeout
 pub hisi_rf_core::BackendErrorClass::UnsupportedSecurity
 pub enum hisi_rf_core::CancelDirective
 pub hisi_rf_core::CancelDirective::AlreadyRequested
@@ -35,6 +36,7 @@ pub hisi_rf_core::DiagnosticCode::BackendOther
 pub hisi_rf_core::DiagnosticCode::BackendTimeout
 pub hisi_rf_core::DiagnosticCode::ConnectionFailed
 pub hisi_rf_core::DiagnosticCode::OperationCancelled
+pub hisi_rf_core::DiagnosticCode::OperationTimeout
 pub hisi_rf_core::DiagnosticCode::Protocol
 pub hisi_rf_core::DiagnosticCode::ResourceUnavailable
 pub hisi_rf_core::DiagnosticCode::UnsupportedSecurity
@@ -245,6 +247,10 @@ impl hisi_rf_core::BackendError
 pub const fn hisi_rf_core::BackendError::diagnostic(self) -> hisi_rf_core::Diagnostic
 impl core::fmt::Display for hisi_rf_core::BackendError
 pub fn hisi_rf_core::BackendError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct hisi_rf_core::BackendTimeout(_)
+impl hisi_rf_core::BackendTimeout
+pub const fn hisi_rf_core::BackendTimeout::as_millis(self) -> u32
+pub const fn hisi_rf_core::BackendTimeout::try_from_millis(u32) -> core::option::Option<Self>
 pub struct hisi_rf_core::BlockingRunnerDiagnostics
 pub hisi_rf_core::BlockingRunnerDiagnostics::backend_poll_calls: u32
 pub hisi_rf_core::BlockingRunnerDiagnostics::backend_poll_errors: u32
@@ -319,6 +325,7 @@ pub fn hisi_rf_core::IncrementalBackendDriver<B>::drive_once(&mut self, hisi_rf_
 pub fn hisi_rf_core::IncrementalBackendDriver<B>::into_backend(self) -> B
 pub const fn hisi_rf_core::IncrementalBackendDriver<B>::new(B, hisi_rf_core::WorkBudget) -> Self
 pub fn hisi_rf_core::IncrementalBackendDriver<B>::next_deadline_us(&self) -> core::option::Option<u64>
+pub fn hisi_rf_core::IncrementalBackendDriver<B>::request_cancel(&mut self, hisi_rf_core::CommandSequence) -> core::result::Result<core::option::Option<hisi_rf_core::IncrementalDriverEvent>, hisi_rf_core::IncrementalDriverError>
 pub fn hisi_rf_core::IncrementalBackendDriver<B>::submit(&mut self, hisi_rf_core::CommandSequence, hisi_rf_core::IncrementalRequest) -> core::result::Result<(), hisi_rf_core::SubmitError<hisi_rf_core::IncrementalRequest>>
 pub fn hisi_rf_core::IncrementalBackendDriver<B>::wait_intent(&self) -> hisi_rf_core::IncrementalWaitIntent
 pub struct hisi_rf_core::IncrementalRadioParts<B, D, const EVENTS: usize>
@@ -377,6 +384,10 @@ pub struct hisi_rf_core::OperationId
 impl hisi_rf_core::OperationId
 pub const fn hisi_rf_core::OperationId::generation(self) -> core::num::nonzero::NonZeroU32
 pub const fn hisi_rf_core::OperationId::slot(self) -> u8
+pub struct hisi_rf_core::OperationTimeout(_)
+impl hisi_rf_core::OperationTimeout
+pub const fn hisi_rf_core::OperationTimeout::as_millis(self) -> u32
+pub const fn hisi_rf_core::OperationTimeout::try_from_millis(u32) -> core::option::Option<Self>
 pub struct hisi_rf_core::OperationTracker
 impl hisi_rf_core::OperationTracker
 pub fn hisi_rf_core::OperationTracker::commit_terminal(&mut self, hisi_rf_core::OperationId) -> core::result::Result<bool, hisi_rf_core::OperationStateError>
@@ -425,8 +436,8 @@ impl<const EVENTS: usize> core::default::Default for hisi_rf_core::RadioState<EV
 pub fn hisi_rf_core::RadioState<EVENTS>::default() -> Self
 pub struct hisi_rf_core::ScanConfig
 impl hisi_rf_core::ScanConfig
-pub const fn hisi_rf_core::ScanConfig::timeout_ms(self) -> u32
-pub const fn hisi_rf_core::ScanConfig::try_from_timeout_ms(u32) -> core::option::Option<Self>
+pub const fn hisi_rf_core::ScanConfig::new(hisi_rf_core::OperationTimeout) -> Self
+pub const fn hisi_rf_core::ScanConfig::operation_timeout(self) -> hisi_rf_core::OperationTimeout
 pub struct hisi_rf_core::ScanOutcome
 pub hisi_rf_core::ScanOutcome::count: usize
 pub hisi_rf_core::ScanOutcome::truncated: bool
@@ -449,10 +460,10 @@ pub hisi_rf_core::StationConfig::channel: u8
 pub hisi_rf_core::StationConfig::passphrase: hisi_rf_core::Passphrase
 pub hisi_rf_core::StationConfig::ssid: hisi_rf_core::Ssid
 impl hisi_rf_core::StationConfig
+pub const fn hisi_rf_core::StationConfig::operation_timeout(&self) -> hisi_rf_core::OperationTimeout
 pub const fn hisi_rf_core::StationConfig::security(&self) -> hisi_rf_core::PersonalSecurity
-pub const fn hisi_rf_core::StationConfig::timeout_ms(&self) -> u32
-pub fn hisi_rf_core::StationConfig::wpa2_personal(&hisi_rf_core::ScanResult, hisi_rf_core::Passphrase, u32) -> core::option::Option<Self>
-pub fn hisi_rf_core::StationConfig::wpa3_personal(&hisi_rf_core::ScanResult, hisi_rf_core::Passphrase, hisi_rf_core::SaePwe, u32) -> core::option::Option<Self>
+pub fn hisi_rf_core::StationConfig::wpa2_personal(&hisi_rf_core::ScanResult, hisi_rf_core::Passphrase, hisi_rf_core::OperationTimeout) -> core::option::Option<Self>
+pub fn hisi_rf_core::StationConfig::wpa3_personal(&hisi_rf_core::ScanResult, hisi_rf_core::Passphrase, hisi_rf_core::SaePwe, hisi_rf_core::OperationTimeout) -> core::option::Option<Self>
 pub struct hisi_rf_core::SubmitError<C>
 impl<C> hisi_rf_core::SubmitError<C>
 pub fn hisi_rf_core::SubmitError<C>::into_command(self) -> hisi_rf_core::PendingCommand<C>
@@ -460,6 +471,7 @@ pub const fn hisi_rf_core::SubmitError<C>::reason(&self) -> hisi_rf_core::Comman
 pub struct hisi_rf_core::WaitSet(_)
 impl hisi_rf_core::WaitSet
 pub const hisi_rf_core::WaitSet::BACKEND: Self
+pub const hisi_rf_core::WaitSet::CANCEL: Self
 pub const hisi_rf_core::WaitSet::COMMAND: Self
 pub const hisi_rf_core::WaitSet::L2_RX: Self
 pub const hisi_rf_core::WaitSet::TIMER: Self
@@ -473,8 +485,8 @@ pub const fn hisi_rf_core::WaitSet::is_empty(self) -> bool
 pub const fn hisi_rf_core::WaitSet::union(self, Self) -> Self
 pub const fn hisi_rf_core::WaitSet::without(self, Self) -> Self
 pub struct hisi_rf_core::WifiConfig
-pub hisi_rf_core::WifiConfig::disconnect_timeout_ms: u32
-pub hisi_rf_core::WifiConfig::initialize_timeout_ms: u32
+pub hisi_rf_core::WifiConfig::disconnect_timeout: hisi_rf_core::BackendTimeout
+pub hisi_rf_core::WifiConfig::initialize_timeout: hisi_rf_core::BackendTimeout
 impl core::default::Default for hisi_rf_core::WifiConfig
 pub fn hisi_rf_core::WifiConfig::default() -> Self
 pub struct hisi_rf_core::WifiController<const EVENTS: usize>

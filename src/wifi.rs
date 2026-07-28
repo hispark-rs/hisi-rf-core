@@ -21,18 +21,63 @@ pub struct RadioConfig {
 /// Wi-Fi control-plane defaults.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiConfig {
-    /// Maximum time a backend may spend initializing.
-    pub initialize_timeout_ms: u32,
-    /// Maximum time to wait for a disconnect event.
-    pub disconnect_timeout_ms: u32,
+    /// Backend lifecycle timeout for radio initialization.
+    pub initialize_timeout: BackendTimeout,
+    /// Backend lifecycle timeout for disconnect cleanup.
+    pub disconnect_timeout: BackendTimeout,
 }
 
 impl Default for WifiConfig {
     fn default() -> Self {
         Self {
-            initialize_timeout_ms: 30_000,
-            disconnect_timeout_ms: 10_000,
+            initialize_timeout: BackendTimeout::from_millis_const(30_000),
+            disconnect_timeout: BackendTimeout::from_millis_const(10_000),
         }
+    }
+}
+
+/// Non-zero end-to-end timeout for one protocol operation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OperationTimeout(u32);
+
+impl OperationTimeout {
+    /// Validate a non-zero timeout in milliseconds.
+    pub const fn try_from_millis(milliseconds: u32) -> Option<Self> {
+        if milliseconds == 0 {
+            None
+        } else {
+            Some(Self(milliseconds))
+        }
+    }
+
+    /// Return the timeout in milliseconds.
+    pub const fn as_millis(self) -> u32 {
+        self.0
+    }
+}
+
+/// Non-zero timeout for a bounded backend or vendor lifecycle call.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BackendTimeout(u32);
+
+impl BackendTimeout {
+    /// Validate a non-zero timeout in milliseconds.
+    pub const fn try_from_millis(milliseconds: u32) -> Option<Self> {
+        if milliseconds == 0 {
+            None
+        } else {
+            Some(Self(milliseconds))
+        }
+    }
+
+    /// Return the timeout in milliseconds.
+    pub const fn as_millis(self) -> u32 {
+        self.0
+    }
+
+    const fn from_millis_const(milliseconds: u32) -> Self {
+        assert!(milliseconds != 0);
+        Self(milliseconds)
     }
 }
 
@@ -161,22 +206,18 @@ impl ScanResult {
 /// Bounded station scan request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScanConfig {
-    timeout_ms: u32,
+    operation_timeout: OperationTimeout,
 }
 
 impl ScanConfig {
-    /// Construct a scan request with a non-zero timeout.
-    pub const fn try_from_timeout_ms(timeout_ms: u32) -> Option<Self> {
-        if timeout_ms == 0 {
-            None
-        } else {
-            Some(Self { timeout_ms })
-        }
+    /// Construct a bounded scan request.
+    pub const fn new(operation_timeout: OperationTimeout) -> Self {
+        Self { operation_timeout }
     }
 
-    /// Timeout passed to the chip backend.
-    pub const fn timeout_ms(self) -> u32 {
-        self.timeout_ms
+    /// End-to-end scan timeout enforced by the protocol backend.
+    pub const fn operation_timeout(self) -> OperationTimeout {
+        self.operation_timeout
     }
 }
 
@@ -201,7 +242,7 @@ pub struct StationConfig {
     /// WPA2/WPA3-Personal passphrase.
     pub passphrase: Passphrase,
     security: PersonalSecurity,
-    timeout_ms: u32,
+    operation_timeout: OperationTimeout,
 }
 
 impl StationConfig {
@@ -209,13 +250,12 @@ impl StationConfig {
     pub fn wpa2_personal(
         result: &ScanResult,
         passphrase: Passphrase,
-        timeout_ms: u32,
+        operation_timeout: OperationTimeout,
     ) -> Option<Self> {
         if !matches!(
             result.security,
             Security::Wpa2Personal | Security::Wpa2Wpa3PersonalTransition
-        ) || timeout_ms == 0
-        {
+        ) {
             return None;
         }
         Some(Self {
@@ -224,7 +264,7 @@ impl StationConfig {
             channel: result.channel,
             passphrase,
             security: PersonalSecurity::Wpa2,
-            timeout_ms,
+            operation_timeout,
         })
     }
 
@@ -236,13 +276,12 @@ impl StationConfig {
         result: &ScanResult,
         passphrase: Passphrase,
         sae_pwe: SaePwe,
-        timeout_ms: u32,
+        operation_timeout: OperationTimeout,
     ) -> Option<Self> {
         if !matches!(
             result.security,
             Security::Wpa3Personal | Security::Wpa2Wpa3PersonalTransition
-        ) || timeout_ms == 0
-        {
+        ) {
             return None;
         }
         Some(Self {
@@ -251,7 +290,7 @@ impl StationConfig {
             channel: result.channel,
             passphrase,
             security: PersonalSecurity::Wpa3 { sae_pwe },
-            timeout_ms,
+            operation_timeout,
         })
     }
 
@@ -260,9 +299,9 @@ impl StationConfig {
         self.security
     }
 
-    /// Maximum time to wait for association and authorization.
-    pub const fn timeout_ms(&self) -> u32 {
-        self.timeout_ms
+    /// End-to-end association and authorization timeout.
+    pub const fn operation_timeout(&self) -> OperationTimeout {
+        self.operation_timeout
     }
 }
 
@@ -282,8 +321,10 @@ pub enum BackendErrorClass {
     Initialize,
     /// The requested operation is already active.
     Busy,
-    /// A bounded operation timed out.
-    Timeout,
+    /// The end-to-end protocol operation timeout elapsed.
+    OperationTimeout,
+    /// A bounded backend or vendor lifecycle call timed out.
+    BackendTimeout,
     /// The operation was explicitly cancelled before completion.
     Cancelled,
     /// The selected profile could not acquire a required bounded resource.
@@ -320,9 +361,10 @@ impl BackendError {
             BackendErrorClass::UnsupportedSecurity | BackendErrorClass::Connect => {
                 DiagnosticStage::Connect
             }
-            BackendErrorClass::Busy | BackendErrorClass::Timeout | BackendErrorClass::Cancelled => {
-                DiagnosticStage::Operation
-            }
+            BackendErrorClass::Busy
+            | BackendErrorClass::OperationTimeout
+            | BackendErrorClass::Cancelled => DiagnosticStage::Operation,
+            BackendErrorClass::BackendTimeout => DiagnosticStage::Backend,
             BackendErrorClass::ResourceUnavailable => DiagnosticStage::Runtime,
             BackendErrorClass::Other => DiagnosticStage::Backend,
         };
@@ -569,11 +611,43 @@ pub struct WifiController<const EVENTS: usize> {
     next_sequence: u32,
 }
 
+struct OperationCancellation<const EVENTS: usize> {
+    state: &'static RadioState<EVENTS>,
+    sequence: u32,
+    armed: bool,
+}
+
+impl<const EVENTS: usize> OperationCancellation<EVENTS> {
+    const fn new(state: &'static RadioState<EVENTS>, sequence: u32) -> Self {
+        Self {
+            state,
+            sequence,
+            armed: true,
+        }
+    }
+
+    fn complete(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl<const EVENTS: usize> Drop for OperationCancellation<EVENTS> {
+    fn drop(&mut self) {
+        if self.armed {
+            // The unique controller can have at most one command in the facade
+            // channel, one pending in the incremental driver, and one active
+            // operation. The three-entry cancellation channel therefore
+            // covers every accepted-but-unobserved control future.
+            let _ = self.state.shared.cancellations.try_send(self.sequence);
+        }
+    }
+}
+
 impl<const EVENTS: usize> WifiController<EVENTS> {
     /// Ask the runner to initialize the backend.
     ///
-    /// Dropping this future stops waiting but does not cancel an operation the
-    /// runner has already received. A later command ignores that stale result.
+    /// Dropping this future requests cancellation. The unique runner performs
+    /// backend abort and cleanup outside the drop path.
     pub async fn initialize(&mut self) -> Result<(), Error> {
         let sequence = self.allocate_sequence();
         self.send_command(Command {
@@ -581,17 +655,20 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
             kind: CommandKind::Initialize,
         })
         .await;
+        let mut cancellation = OperationCancellation::new(self.state, sequence);
         loop {
             let completion = self.state.shared.completion.wait().await;
             if completion.sequence != sequence {
                 continue;
             }
-            return match completion.kind {
+            let result = match completion.kind {
                 CompletionKind::Initialize(result) => result.map_err(Error::Backend),
                 #[cfg(feature = "incremental-backend-experiment")]
                 CompletionKind::Protocol => Err(Error::Protocol),
                 _ => Err(Error::Protocol),
             };
+            cancellation.complete();
+            return result;
         }
     }
 
@@ -607,25 +684,30 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
             kind: CommandKind::Scan(config),
         })
         .await;
+        let mut cancellation = OperationCancellation::new(self.state, sequence);
         loop {
             let completion = self.state.shared.completion.wait().await;
             if completion.sequence != sequence {
                 continue;
             }
-            return match completion.kind {
-                CompletionKind::Scan(result) => {
-                    let backend = result.map_err(Error::Backend)?;
-                    let count = backend.count.min(output.len());
-                    output[..count].copy_from_slice(&self.state.shared.scan_results()[..count]);
-                    Ok(ScanOutcome {
-                        count,
-                        truncated: backend.truncated || backend.count > output.len(),
-                    })
-                }
+            let result = match completion.kind {
+                CompletionKind::Scan(result) => match result {
+                    Ok(backend) => {
+                        let count = backend.count.min(output.len());
+                        output[..count].copy_from_slice(&self.state.shared.scan_results()[..count]);
+                        Ok(ScanOutcome {
+                            count,
+                            truncated: backend.truncated || backend.count > output.len(),
+                        })
+                    }
+                    Err(error) => Err(Error::Backend(error)),
+                },
                 #[cfg(feature = "incremental-backend-experiment")]
                 CompletionKind::Protocol => Err(Error::Protocol),
                 _ => Err(Error::Protocol),
             };
+            cancellation.complete();
+            return result;
         }
     }
 
@@ -637,17 +719,20 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
             kind: CommandKind::Connect(config),
         })
         .await;
+        let mut cancellation = OperationCancellation::new(self.state, sequence);
         loop {
             let completion = self.state.shared.completion.wait().await;
             if completion.sequence != sequence {
                 continue;
             }
-            return match completion.kind {
+            let result = match completion.kind {
                 CompletionKind::Connect(result) => result.map_err(Error::Backend),
                 #[cfg(feature = "incremental-backend-experiment")]
                 CompletionKind::Protocol => Err(Error::Protocol),
                 _ => Err(Error::Protocol),
             };
+            cancellation.complete();
+            return result;
         }
     }
 
@@ -659,17 +744,20 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
             kind: CommandKind::Disconnect,
         })
         .await;
+        let mut cancellation = OperationCancellation::new(self.state, sequence);
         loop {
             let completion = self.state.shared.completion.wait().await;
             if completion.sequence != sequence {
                 continue;
             }
-            return match completion.kind {
+            let result = match completion.kind {
                 CompletionKind::Disconnect(result) => result.map_err(Error::Backend),
                 #[cfg(feature = "incremental-backend-experiment")]
                 CompletionKind::Protocol => Err(Error::Protocol),
                 _ => Err(Error::Protocol),
             };
+            cancellation.complete();
+            return result;
         }
     }
 
@@ -751,7 +839,7 @@ impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
         saturating_increment(&self.state.shared.run_once_calls);
         let mut did_work = false;
         if let Ok(command) = self.state.shared.commands.try_receive() {
-            self.process_command(command);
+            self.process_or_cancel_command(command);
             did_work = true;
         }
         saturating_increment(&self.state.shared.backend_poll_calls);
@@ -788,8 +876,28 @@ impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
     pub async fn run(mut self) -> ! {
         loop {
             let command = self.state.shared.commands.receive().await;
-            self.process_command(command);
+            self.process_or_cancel_command(command);
         }
+    }
+
+    fn process_or_cancel_command(&mut self, command: Command) {
+        while let Ok(sequence) = self.state.shared.cancellations.try_receive() {
+            if sequence == command.sequence {
+                let error = BackendError::new(BackendErrorClass::Cancelled, 0);
+                self.state.shared.publish_event(WifiEvent::Failed(error));
+                self.state.shared.completion.signal(Completion {
+                    sequence,
+                    kind: match command.kind {
+                        CommandKind::Initialize => CompletionKind::Initialize(Err(error)),
+                        CommandKind::Scan(_) => CompletionKind::Scan(Err(error)),
+                        CommandKind::Connect(_) => CompletionKind::Connect(Err(error)),
+                        CommandKind::Disconnect => CompletionKind::Disconnect(Err(error)),
+                    },
+                });
+                return;
+            }
+        }
+        self.process_command(command);
     }
 
     fn process_command(&mut self, command: Command) {
@@ -1019,7 +1127,7 @@ mod tests {
         let mut results = [ScanResult::EMPTY; 1];
         {
             let mut scan = core::pin::pin!(wifi.controller.scan(
-                ScanConfig::try_from_timeout_ms(1_000).unwrap(),
+                ScanConfig::new(OperationTimeout::try_from_millis(1_000).unwrap()),
                 &mut results,
             ));
             assert!(poll(scan.as_mut()).is_pending());
@@ -1196,10 +1304,12 @@ mod tests {
             assert!(poll(cancelled.as_mut()).is_pending());
         }
         assert!(runner.run_once());
+        assert_eq!(runner.backend.calls, 0);
 
         let mut next = core::pin::pin!(wifi.controller.initialize());
         assert!(poll(next.as_mut()).is_pending());
         assert!(runner.run_once());
+        assert_eq!(runner.backend.calls, 1);
         assert_eq!(poll(next.as_mut()), Poll::Ready(Ok(())));
     }
 
@@ -1209,7 +1319,10 @@ mod tests {
         assert!(Ssid::try_from_bytes(&[b'x'; 33]).is_none());
         assert!(Passphrase::try_from_ascii(b"short").is_none());
         assert!(Passphrase::try_from_ascii(b"testtest").is_some());
-        assert!(ScanConfig::try_from_timeout_ms(0).is_none());
+        assert!(OperationTimeout::try_from_millis(0).is_none());
+        assert!(BackendTimeout::try_from_millis(0).is_none());
+        assert_eq!(OperationTimeout::try_from_millis(1).unwrap().as_millis(), 1);
+        assert_eq!(BackendTimeout::try_from_millis(1).unwrap().as_millis(), 1);
     }
 
     #[test]
@@ -1226,7 +1339,7 @@ mod tests {
             &result,
             Passphrase::try_from_ascii(b"testtest").unwrap(),
             SaePwe::Both,
-            10_000,
+            OperationTimeout::try_from_millis(10_000).unwrap(),
         )
         .unwrap();
         assert_eq!(
@@ -1255,7 +1368,7 @@ mod tests {
         let wpa2 = StationConfig::wpa2_personal(
             &result,
             Passphrase::try_from_ascii(b"testtest").unwrap(),
-            10_000,
+            OperationTimeout::try_from_millis(10_000).unwrap(),
         )
         .unwrap();
         assert_eq!(wpa2.security(), PersonalSecurity::Wpa2);
@@ -1264,7 +1377,7 @@ mod tests {
             &result,
             Passphrase::try_from_ascii(b"testtest").unwrap(),
             SaePwe::Both,
-            10_000,
+            OperationTimeout::try_from_millis(10_000).unwrap(),
         )
         .unwrap();
         assert_eq!(

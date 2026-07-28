@@ -5,7 +5,7 @@ use core::fmt;
 use crate::{BackendError, BackendErrorClass, Error};
 
 /// Versioned machine-readable diagnostic schema.
-pub const DIAGNOSTIC_SCHEMA: &str = "hisi-rf-error/v2";
+pub const DIAGNOSTIC_SCHEMA: &str = "hisi-rf-error/v3";
 
 /// Maximum number of backend trace entries retained by one public error.
 pub const DIAGNOSTIC_TRACE_CAPACITY: usize = 4;
@@ -19,6 +19,8 @@ pub enum DiagnosticCode {
     BackendInitialize,
     /// Another operation currently owns the backend.
     BackendBusy,
+    /// The end-to-end protocol operation timeout elapsed.
+    OperationTimeout,
     /// A bounded backend operation timed out.
     BackendTimeout,
     /// A requested operation was cancelled before completion.
@@ -42,6 +44,7 @@ impl DiagnosticCode {
             Self::AlreadyInitialized => "radio.already_initialized",
             Self::BackendInitialize => "backend.initialize",
             Self::BackendBusy => "backend.busy",
+            Self::OperationTimeout => "operation.timeout",
             Self::BackendTimeout => "backend.timeout",
             Self::OperationCancelled => "operation.cancelled",
             Self::ResourceUnavailable => "resource.unavailable",
@@ -323,6 +326,7 @@ impl Diagnostic {
             DiagnosticCode::AlreadyInitialized => "errors-radio-already-initialized",
             DiagnosticCode::BackendInitialize => "errors-backend-initialize",
             DiagnosticCode::BackendBusy => "errors-backend-busy",
+            DiagnosticCode::OperationTimeout => "errors-operation-timeout",
             DiagnosticCode::BackendTimeout => "errors-backend-timeout",
             DiagnosticCode::OperationCancelled => "errors-operation-cancelled",
             DiagnosticCode::ResourceUnavailable => "errors-resource-unavailable",
@@ -430,7 +434,11 @@ impl BackendError {
                 RecoveryAction::Reinitialize,
             ),
             BackendErrorClass::Busy => (DiagnosticCode::BackendBusy, RecoveryAction::WaitAndRetry),
-            BackendErrorClass::Timeout => (
+            BackendErrorClass::OperationTimeout => (
+                DiagnosticCode::OperationTimeout,
+                RecoveryAction::RetryOperation,
+            ),
+            BackendErrorClass::BackendTimeout => (
                 DiagnosticCode::BackendTimeout,
                 RecoveryAction::RetryOperation,
             ),
@@ -526,14 +534,14 @@ mod tests {
     #[test]
     fn json_is_deterministic_and_contains_no_configuration_text() {
         let mut json = String::new();
-        Error::Backend(BackendError::new(BackendErrorClass::Timeout, 7))
+        Error::Backend(BackendError::new(BackendErrorClass::BackendTimeout, 7))
             .diagnostic()
             .write_json(&mut json)
             .unwrap();
 
         assert_eq!(
             json,
-            "{\"schema\":\"hisi-rf-error/v2\",\"code\":\"backend.timeout\",\"stage\":\"operation\",\"action\":\"retry_operation\",\"backend_code\":7,\"profile_revision\":null,\"trace\":[],\"trace_truncated\":false,\"docs\":\"errors-backend-timeout\"}"
+            "{\"schema\":\"hisi-rf-error/v3\",\"code\":\"backend.timeout\",\"stage\":\"backend\",\"action\":\"retry_operation\",\"backend_code\":7,\"profile_revision\":null,\"trace\":[],\"trace_truncated\":false,\"docs\":\"errors-backend-timeout\"}"
         );
         assert!(!json.contains("ssid"));
         assert!(!json.contains("passphrase"));
@@ -594,10 +602,16 @@ mod tests {
                 RecoveryAction::InspectNetworkAndRetry,
             ),
             (
-                BackendError::new(BackendErrorClass::Timeout, 0x45)
+                BackendError::new(BackendErrorClass::OperationTimeout, 0x45)
                     .with_stage(DiagnosticStage::Eapol),
-                DiagnosticCode::BackendTimeout,
+                DiagnosticCode::OperationTimeout,
                 DiagnosticStage::Eapol,
+                RecoveryAction::RetryOperation,
+            ),
+            (
+                BackendError::new(BackendErrorClass::BackendTimeout, 0x46),
+                DiagnosticCode::BackendTimeout,
+                DiagnosticStage::Backend,
                 RecoveryAction::RetryOperation,
             ),
             (
@@ -617,7 +631,7 @@ mod tests {
                 RecoveryAction::ProvideResources,
             ),
             (
-                BackendError::new(BackendErrorClass::Timeout, 7)
+                BackendError::new(BackendErrorClass::BackendTimeout, 7)
                     .with_stage(DiagnosticStage::Runtime)
                     .with_trace(DiagnosticTraceKind::RuntimeCode, 7),
                 DiagnosticCode::BackendTimeout,
@@ -634,7 +648,7 @@ mod tests {
             assert_eq!(diagnostic.backend_code(), Some(error.code()));
         }
 
-        let resource = fixtures[3].0.diagnostic().trace();
+        let resource = fixtures[4].0.diagnostic().trace();
         assert_eq!(
             resource.get(0).map(DiagnosticTraceEntry::kind),
             Some(DiagnosticTraceKind::ResourceRequired)
