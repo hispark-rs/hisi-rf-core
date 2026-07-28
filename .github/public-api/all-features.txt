@@ -1,0 +1,532 @@
+pub mod hisi_rf_core
+pub enum hisi_rf_core::BackendErrorClass
+pub hisi_rf_core::BackendErrorClass::Busy
+pub hisi_rf_core::BackendErrorClass::Cancelled
+pub hisi_rf_core::BackendErrorClass::Connect
+pub hisi_rf_core::BackendErrorClass::Initialize
+pub hisi_rf_core::BackendErrorClass::Other
+pub hisi_rf_core::BackendErrorClass::ResourceUnavailable
+pub hisi_rf_core::BackendErrorClass::Timeout
+pub hisi_rf_core::BackendErrorClass::UnsupportedSecurity
+pub enum hisi_rf_core::CancelDirective
+pub hisi_rf_core::CancelDirective::AlreadyRequested
+pub hisi_rf_core::CancelDirective::CompleteLocally
+pub hisi_rf_core::CancelDirective::NotifyBackend
+pub enum hisi_rf_core::CancelOutcome
+pub hisi_rf_core::CancelOutcome::AlreadyRequested
+pub hisi_rf_core::CancelOutcome::Requested
+pub enum hisi_rf_core::CommandArbiterAction
+pub hisi_rf_core::CommandArbiterAction::CancelActive(hisi_rf_core::OperationId)
+pub hisi_rf_core::CommandArbiterAction::Idle
+pub hisi_rf_core::CommandArbiterAction::StartPending(hisi_rf_core::CommandSequence)
+pub hisi_rf_core::CommandArbiterAction::Starting(hisi_rf_core::CommandSequence)
+pub hisi_rf_core::CommandArbiterAction::WaitActive(hisi_rf_core::OperationId)
+pub enum hisi_rf_core::CommandArbiterError
+pub hisi_rf_core::CommandArbiterError::Busy
+pub hisi_rf_core::CommandArbiterError::InvalidTransition
+pub hisi_rf_core::CommandArbiterError::StaleOperation
+impl core::convert::From<hisi_rf_core::CommandArbiterError> for hisi_rf_core::IncrementalDriverError
+pub fn hisi_rf_core::IncrementalDriverError::from(hisi_rf_core::CommandArbiterError) -> Self
+pub enum hisi_rf_core::DiagnosticCode
+pub hisi_rf_core::DiagnosticCode::AlreadyInitialized
+pub hisi_rf_core::DiagnosticCode::BackendBusy
+pub hisi_rf_core::DiagnosticCode::BackendInitialize
+pub hisi_rf_core::DiagnosticCode::BackendOther
+pub hisi_rf_core::DiagnosticCode::BackendTimeout
+pub hisi_rf_core::DiagnosticCode::ConnectionFailed
+pub hisi_rf_core::DiagnosticCode::OperationCancelled
+pub hisi_rf_core::DiagnosticCode::Protocol
+pub hisi_rf_core::DiagnosticCode::ResourceUnavailable
+pub hisi_rf_core::DiagnosticCode::UnsupportedSecurity
+impl hisi_rf_core::DiagnosticCode
+pub const fn hisi_rf_core::DiagnosticCode::as_str(self) -> &'static str
+pub enum hisi_rf_core::DiagnosticStage
+pub hisi_rf_core::DiagnosticStage::Associate
+pub hisi_rf_core::DiagnosticStage::Authenticate
+pub hisi_rf_core::DiagnosticStage::Backend
+pub hisi_rf_core::DiagnosticStage::Connect
+pub hisi_rf_core::DiagnosticStage::ControlPlane
+pub hisi_rf_core::DiagnosticStage::Disconnect
+pub hisi_rf_core::DiagnosticStage::Eapol
+pub hisi_rf_core::DiagnosticStage::Initialize
+pub hisi_rf_core::DiagnosticStage::Operation
+pub hisi_rf_core::DiagnosticStage::Pmf
+pub hisi_rf_core::DiagnosticStage::Runtime
+pub hisi_rf_core::DiagnosticStage::Sae
+pub hisi_rf_core::DiagnosticStage::Scan
+impl hisi_rf_core::DiagnosticStage
+pub const fn hisi_rf_core::DiagnosticStage::as_str(self) -> &'static str
+pub enum hisi_rf_core::DiagnosticTraceKind
+pub hisi_rf_core::DiagnosticTraceKind::BackendStatus
+pub hisi_rf_core::DiagnosticTraceKind::DisconnectReason
+pub hisi_rf_core::DiagnosticTraceKind::DriverContext
+pub hisi_rf_core::DiagnosticTraceKind::HostapStatus
+pub hisi_rf_core::DiagnosticTraceKind::IeeeStatus
+pub hisi_rf_core::DiagnosticTraceKind::ResourceAvailable
+pub hisi_rf_core::DiagnosticTraceKind::ResourceRequired
+pub hisi_rf_core::DiagnosticTraceKind::RuntimeCode
+pub hisi_rf_core::DiagnosticTraceKind::SupplicantContext
+pub hisi_rf_core::DiagnosticTraceKind::VendorStatus
+impl hisi_rf_core::DiagnosticTraceKind
+pub const fn hisi_rf_core::DiagnosticTraceKind::as_str(self) -> &'static str
+pub enum hisi_rf_core::Error
+pub hisi_rf_core::Error::AlreadyInitialized
+pub hisi_rf_core::Error::Backend(hisi_rf_core::BackendError)
+pub hisi_rf_core::Error::Protocol
+impl hisi_rf_core::Error
+pub const fn hisi_rf_core::Error::diagnostic(self) -> hisi_rf_core::Diagnostic
+impl core::fmt::Display for hisi_rf_core::Error
+pub fn hisi_rf_core::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum hisi_rf_core::IncrementalCompletion
+pub hisi_rf_core::IncrementalCompletion::Connected(hisi_rf_core::ConnectionInfo)
+pub hisi_rf_core::IncrementalCompletion::Disconnected
+pub hisi_rf_core::IncrementalCompletion::Initialized
+pub hisi_rf_core::IncrementalCompletion::Scan(hisi_rf_core::ScanOutcome)
+pub enum hisi_rf_core::IncrementalDriverError
+pub hisi_rf_core::IncrementalDriverError::Arbiter(hisi_rf_core::CommandArbiterError)
+pub hisi_rf_core::IncrementalDriverError::Runner(hisi_rf_core::RunnerStateError)
+impl core::convert::From<hisi_rf_core::CommandArbiterError> for hisi_rf_core::IncrementalDriverError
+pub fn hisi_rf_core::IncrementalDriverError::from(hisi_rf_core::CommandArbiterError) -> Self
+impl core::convert::From<hisi_rf_core::IncrementalDriverError> for hisi_rf_core::IncrementalRadioRunnerError
+pub fn hisi_rf_core::IncrementalRadioRunnerError::from(hisi_rf_core::IncrementalDriverError) -> Self
+impl core::convert::From<hisi_rf_core::RunnerStateError> for hisi_rf_core::IncrementalDriverError
+pub fn hisi_rf_core::IncrementalDriverError::from(hisi_rf_core::RunnerStateError) -> Self
+pub enum hisi_rf_core::IncrementalDriverEvent
+pub hisi_rf_core::IncrementalDriverEvent::BudgetExhausted
+pub hisi_rf_core::IncrementalDriverEvent::BudgetExhausted::made_progress: bool
+pub hisi_rf_core::IncrementalDriverEvent::BudgetExhausted::operation: hisi_rf_core::OperationId
+pub hisi_rf_core::IncrementalDriverEvent::BudgetExhausted::sequence: hisi_rf_core::CommandSequence
+pub hisi_rf_core::IncrementalDriverEvent::BudgetExhausted::wait_for: hisi_rf_core::WaitSet
+pub hisi_rf_core::IncrementalDriverEvent::CancelRequested
+pub hisi_rf_core::IncrementalDriverEvent::CancelRequested::operation: hisi_rf_core::OperationId
+pub hisi_rf_core::IncrementalDriverEvent::CancelRequested::sequence: hisi_rf_core::CommandSequence
+pub hisi_rf_core::IncrementalDriverEvent::Cancelled
+pub hisi_rf_core::IncrementalDriverEvent::Cancelled::sequence: hisi_rf_core::CommandSequence
+pub hisi_rf_core::IncrementalDriverEvent::Cancelled::suppressed_completion: bool
+pub hisi_rf_core::IncrementalDriverEvent::Completed
+pub hisi_rf_core::IncrementalDriverEvent::Completed::completion: hisi_rf_core::IncrementalCompletion
+pub hisi_rf_core::IncrementalDriverEvent::Completed::sequence: hisi_rf_core::CommandSequence
+pub hisi_rf_core::IncrementalDriverEvent::Failed
+pub hisi_rf_core::IncrementalDriverEvent::Failed::cancellation_pending: bool
+pub hisi_rf_core::IncrementalDriverEvent::Failed::error: hisi_rf_core::BackendError
+pub hisi_rf_core::IncrementalDriverEvent::Failed::sequence: hisi_rf_core::CommandSequence
+pub hisi_rf_core::IncrementalDriverEvent::Idle
+pub hisi_rf_core::IncrementalDriverEvent::Pending
+pub hisi_rf_core::IncrementalDriverEvent::Pending::made_progress: bool
+pub hisi_rf_core::IncrementalDriverEvent::Pending::operation: hisi_rf_core::OperationId
+pub hisi_rf_core::IncrementalDriverEvent::Pending::sequence: hisi_rf_core::CommandSequence
+pub hisi_rf_core::IncrementalDriverEvent::Pending::wait_for: hisi_rf_core::WaitSet
+pub hisi_rf_core::IncrementalDriverEvent::Started
+pub hisi_rf_core::IncrementalDriverEvent::Started::operation: hisi_rf_core::OperationId
+pub hisi_rf_core::IncrementalDriverEvent::Started::sequence: hisi_rf_core::CommandSequence
+pub hisi_rf_core::IncrementalDriverEvent::Waiting
+pub hisi_rf_core::IncrementalDriverEvent::Waiting::operation: hisi_rf_core::OperationId
+pub hisi_rf_core::IncrementalDriverEvent::Waiting::sequence: hisi_rf_core::CommandSequence
+pub hisi_rf_core::IncrementalDriverEvent::Waiting::wait_for: hisi_rf_core::WaitSet
+pub enum hisi_rf_core::IncrementalRadioRunnerError
+pub hisi_rf_core::IncrementalRadioRunnerError::CommandArbiter(hisi_rf_core::CommandArbiterError)
+pub hisi_rf_core::IncrementalRadioRunnerError::CommandCapacity
+pub hisi_rf_core::IncrementalRadioRunnerError::CompletionMismatch
+pub hisi_rf_core::IncrementalRadioRunnerError::Driver(hisi_rf_core::IncrementalDriverError)
+pub hisi_rf_core::IncrementalRadioRunnerError::InvalidCommandSequence
+pub hisi_rf_core::IncrementalRadioRunnerError::MissingCommand
+impl core::convert::From<hisi_rf_core::IncrementalDriverError> for hisi_rf_core::IncrementalRadioRunnerError
+pub fn hisi_rf_core::IncrementalRadioRunnerError::from(hisi_rf_core::IncrementalDriverError) -> Self
+pub enum hisi_rf_core::IncrementalRequest
+pub hisi_rf_core::IncrementalRequest::Connect(hisi_rf_core::StationConfig)
+pub hisi_rf_core::IncrementalRequest::Disconnect(hisi_rf_core::WifiConfig)
+pub hisi_rf_core::IncrementalRequest::Initialize(hisi_rf_core::WifiConfig)
+pub hisi_rf_core::IncrementalRequest::Scan(hisi_rf_core::ScanConfig)
+pub enum hisi_rf_core::IncrementalWaitError<E>
+pub hisi_rf_core::IncrementalWaitError::Platform(E)
+pub hisi_rf_core::IncrementalWaitError::UnexpectedSources
+pub hisi_rf_core::IncrementalWaitError::UnexpectedSources::ready: hisi_rf_core::WaitSet
+pub hisi_rf_core::IncrementalWaitError::UnexpectedSources::subscribed: hisi_rf_core::WaitSet
+pub enum hisi_rf_core::ManagementFrameProtection
+pub hisi_rf_core::ManagementFrameProtection::Optional
+pub hisi_rf_core::ManagementFrameProtection::Required
+pub enum hisi_rf_core::OperationLifecycle
+pub hisi_rf_core::OperationLifecycle::CancelRequested
+pub hisi_rf_core::OperationLifecycle::Queued
+pub hisi_rf_core::OperationLifecycle::Started
+pub hisi_rf_core::OperationLifecycle::Terminal
+pub enum hisi_rf_core::OperationStateError
+pub hisi_rf_core::OperationStateError::AlreadyTerminal
+pub hisi_rf_core::OperationStateError::Busy
+pub hisi_rf_core::OperationStateError::InvalidTransition
+pub hisi_rf_core::OperationStateError::Stale
+impl core::convert::From<hisi_rf_core::OperationStateError> for hisi_rf_core::RunnerStateError
+pub fn hisi_rf_core::RunnerStateError::from(hisi_rf_core::OperationStateError) -> Self
+pub enum hisi_rf_core::PersonalSecurity
+pub hisi_rf_core::PersonalSecurity::Wpa2
+pub hisi_rf_core::PersonalSecurity::Wpa3
+pub hisi_rf_core::PersonalSecurity::Wpa3::sae_pwe: hisi_rf_core::SaePwe
+impl hisi_rf_core::PersonalSecurity
+pub const fn hisi_rf_core::PersonalSecurity::management_frame_protection(self) -> hisi_rf_core::ManagementFrameProtection
+pub enum hisi_rf_core::PollDisposition
+pub hisi_rf_core::PollDisposition::BudgetExhausted(hisi_rf_core::WaitSet)
+pub hisi_rf_core::PollDisposition::Cancelled
+pub hisi_rf_core::PollDisposition::Complete(hisi_rf_core::IncrementalCompletion)
+pub hisi_rf_core::PollDisposition::Pending(hisi_rf_core::WaitSet)
+pub enum hisi_rf_core::RecoveryAction
+pub hisi_rf_core::RecoveryAction::InspectBackendCode
+pub hisi_rf_core::RecoveryAction::InspectNetworkAndRetry
+pub hisi_rf_core::RecoveryAction::ProvideResources
+pub hisi_rf_core::RecoveryAction::RecreateController
+pub hisi_rf_core::RecoveryAction::Reinitialize
+pub hisi_rf_core::RecoveryAction::RetryOperation
+pub hisi_rf_core::RecoveryAction::SelectSupportedSecurity
+pub hisi_rf_core::RecoveryAction::UseExistingController
+pub hisi_rf_core::RecoveryAction::WaitAndRetry
+impl hisi_rf_core::RecoveryAction
+pub const fn hisi_rf_core::RecoveryAction::as_str(self) -> &'static str
+pub enum hisi_rf_core::RunnerStateError
+pub hisi_rf_core::RunnerStateError::Operation(hisi_rf_core::OperationStateError)
+pub hisi_rf_core::RunnerStateError::StaleReport
+pub hisi_rf_core::RunnerStateError::StaleReport::actual: hisi_rf_core::OperationId
+pub hisi_rf_core::RunnerStateError::StaleReport::expected: hisi_rf_core::OperationId
+impl core::convert::From<hisi_rf_core::OperationStateError> for hisi_rf_core::RunnerStateError
+pub fn hisi_rf_core::RunnerStateError::from(hisi_rf_core::OperationStateError) -> Self
+impl core::convert::From<hisi_rf_core::RunnerStateError> for hisi_rf_core::IncrementalDriverError
+pub fn hisi_rf_core::IncrementalDriverError::from(hisi_rf_core::RunnerStateError) -> Self
+pub enum hisi_rf_core::RunnerStep
+pub hisi_rf_core::RunnerStep::CommandReady(hisi_rf_core::OperationId)
+pub hisi_rf_core::RunnerStep::Idle
+pub hisi_rf_core::RunnerStep::PollBackend
+pub hisi_rf_core::RunnerStep::PollBackend::operation: hisi_rf_core::OperationId
+pub hisi_rf_core::RunnerStep::PollBackend::reason: hisi_rf_core::WakeReason
+pub hisi_rf_core::RunnerStep::Waiting(hisi_rf_core::WaitSet)
+pub enum hisi_rf_core::RunnerTransition
+pub hisi_rf_core::RunnerTransition::BudgetExhausted
+pub hisi_rf_core::RunnerTransition::BudgetExhausted::made_progress: bool
+pub hisi_rf_core::RunnerTransition::BudgetExhausted::wait_for: hisi_rf_core::WaitSet
+pub hisi_rf_core::RunnerTransition::Cancelled
+pub hisi_rf_core::RunnerTransition::Cancelled::suppressed_completion: bool
+pub hisi_rf_core::RunnerTransition::Completed(hisi_rf_core::IncrementalCompletion)
+pub hisi_rf_core::RunnerTransition::Failed
+pub hisi_rf_core::RunnerTransition::Failed::cancellation_pending: bool
+pub hisi_rf_core::RunnerTransition::Failed::error: hisi_rf_core::BackendError
+pub hisi_rf_core::RunnerTransition::Pending
+pub hisi_rf_core::RunnerTransition::Pending::made_progress: bool
+pub hisi_rf_core::RunnerTransition::Pending::wait_for: hisi_rf_core::WaitSet
+pub enum hisi_rf_core::SaePwe
+pub hisi_rf_core::SaePwe::Both
+pub hisi_rf_core::SaePwe::HashToElement
+pub hisi_rf_core::SaePwe::HuntAndPeck
+pub enum hisi_rf_core::Security
+pub hisi_rf_core::Security::Open
+pub hisi_rf_core::Security::OtherProtected
+pub hisi_rf_core::Security::Wpa2Personal
+pub hisi_rf_core::Security::Wpa2Wpa3PersonalTransition
+pub hisi_rf_core::Security::Wpa3Personal
+pub enum hisi_rf_core::WakeReason
+pub hisi_rf_core::WakeReason::Backend
+pub hisi_rf_core::WakeReason::Command
+pub hisi_rf_core::WakeReason::L2Rx
+pub hisi_rf_core::WakeReason::Timer
+pub enum hisi_rf_core::WifiEvent
+pub hisi_rf_core::WifiEvent::Connected(hisi_rf_core::ConnectionInfo)
+pub hisi_rf_core::WifiEvent::Disconnected
+pub hisi_rf_core::WifiEvent::Disconnected::reason: u16
+pub hisi_rf_core::WifiEvent::Failed(hisi_rf_core::BackendError)
+pub hisi_rf_core::WifiEvent::Initialized
+pub hisi_rf_core::WifiEvent::ScanCompleted
+pub hisi_rf_core::WifiEvent::ScanCompleted::count: usize
+pub hisi_rf_core::WifiEvent::ScanCompleted::truncated: bool
+pub struct hisi_rf_core::BackendError
+impl hisi_rf_core::BackendError
+pub const fn hisi_rf_core::BackendError::class(self) -> hisi_rf_core::BackendErrorClass
+pub const fn hisi_rf_core::BackendError::code(self) -> u32
+pub const fn hisi_rf_core::BackendError::new(hisi_rf_core::BackendErrorClass, u32) -> Self
+pub const fn hisi_rf_core::BackendError::with_profile_revision(self, &'static str) -> Self
+pub const fn hisi_rf_core::BackendError::with_stage(self, hisi_rf_core::DiagnosticStage) -> Self
+pub fn hisi_rf_core::BackendError::with_trace(self, hisi_rf_core::DiagnosticTraceKind, u32) -> Self
+impl hisi_rf_core::BackendError
+pub const fn hisi_rf_core::BackendError::diagnostic(self) -> hisi_rf_core::Diagnostic
+impl core::fmt::Display for hisi_rf_core::BackendError
+pub fn hisi_rf_core::BackendError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct hisi_rf_core::BlockingRunnerDiagnostics
+pub hisi_rf_core::BlockingRunnerDiagnostics::backend_poll_calls: u32
+pub hisi_rf_core::BlockingRunnerDiagnostics::backend_poll_errors: u32
+pub hisi_rf_core::BlockingRunnerDiagnostics::backend_poll_work_batches: u32
+pub hisi_rf_core::BlockingRunnerDiagnostics::command_queue_high_water: usize
+pub hisi_rf_core::BlockingRunnerDiagnostics::command_queue_pending: usize
+pub hisi_rf_core::BlockingRunnerDiagnostics::commands_processed: u32
+pub hisi_rf_core::BlockingRunnerDiagnostics::immediate_repoll_hints: u32
+pub hisi_rf_core::BlockingRunnerDiagnostics::run_once_calls: u32
+pub struct hisi_rf_core::CommandArbiter<C>
+impl<C> hisi_rf_core::CommandArbiter<C>
+pub fn hisi_rf_core::CommandArbiter<C>::action(&self) -> hisi_rf_core::CommandArbiterAction
+pub const fn hisi_rf_core::CommandArbiter<C>::active(&self) -> core::option::Option<(hisi_rf_core::CommandSequence, hisi_rf_core::OperationId)>
+pub const fn hisi_rf_core::CommandArbiter<C>::can_submit(&self) -> bool
+pub fn hisi_rf_core::CommandArbiter<C>::finish_active(&mut self, hisi_rf_core::OperationId) -> core::result::Result<hisi_rf_core::CommandSequence, hisi_rf_core::CommandArbiterError>
+pub fn hisi_rf_core::CommandArbiter<C>::mark_cancel_requested(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::CommandArbiterError>
+pub fn hisi_rf_core::CommandArbiter<C>::mark_started(&mut self, hisi_rf_core::CommandSequence, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::CommandArbiterError>
+pub const fn hisi_rf_core::CommandArbiter<C>::new() -> Self
+pub fn hisi_rf_core::CommandArbiter<C>::pending_sequence(&self) -> core::option::Option<hisi_rf_core::CommandSequence>
+pub fn hisi_rf_core::CommandArbiter<C>::reject_start(&mut self, hisi_rf_core::CommandSequence) -> core::result::Result<(), hisi_rf_core::CommandArbiterError>
+pub fn hisi_rf_core::CommandArbiter<C>::submit(&mut self, hisi_rf_core::PendingCommand<C>) -> core::result::Result<(), hisi_rf_core::SubmitError<C>>
+pub fn hisi_rf_core::CommandArbiter<C>::take_startable(&mut self) -> core::result::Result<hisi_rf_core::PendingCommand<C>, hisi_rf_core::CommandArbiterError>
+impl<C> core::default::Default for hisi_rf_core::CommandArbiter<C>
+pub fn hisi_rf_core::CommandArbiter<C>::default() -> Self
+pub struct hisi_rf_core::CommandSequence(_)
+impl hisi_rf_core::CommandSequence
+pub const fn hisi_rf_core::CommandSequence::get(self) -> u32
+pub const fn hisi_rf_core::CommandSequence::try_from_raw(u32) -> core::option::Option<Self>
+pub struct hisi_rf_core::ConnectionInfo
+pub hisi_rf_core::ConnectionInfo::bssid: [u8; 6]
+pub hisi_rf_core::ConnectionInfo::frequency_mhz: u16
+pub struct hisi_rf_core::Diagnostic
+impl hisi_rf_core::Diagnostic
+pub const fn hisi_rf_core::Diagnostic::action(self) -> hisi_rf_core::RecoveryAction
+pub const fn hisi_rf_core::Diagnostic::backend_code(self) -> core::option::Option<u32>
+pub const fn hisi_rf_core::Diagnostic::code(self) -> hisi_rf_core::DiagnosticCode
+pub const fn hisi_rf_core::Diagnostic::docs_anchor(self) -> &'static str
+pub const fn hisi_rf_core::Diagnostic::profile_revision(self) -> core::option::Option<&'static str>
+pub const fn hisi_rf_core::Diagnostic::schema(self) -> &'static str
+pub const fn hisi_rf_core::Diagnostic::stage(self) -> hisi_rf_core::DiagnosticStage
+pub const fn hisi_rf_core::Diagnostic::trace(self) -> hisi_rf_core::DiagnosticTrace
+pub fn hisi_rf_core::Diagnostic::write_json(self, &mut impl core::fmt::Write) -> core::fmt::Result
+impl core::fmt::Display for hisi_rf_core::Diagnostic
+pub fn hisi_rf_core::Diagnostic::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct hisi_rf_core::DiagnosticTrace
+impl hisi_rf_core::DiagnosticTrace
+pub const fn hisi_rf_core::DiagnosticTrace::get(self, usize) -> core::option::Option<hisi_rf_core::DiagnosticTraceEntry>
+pub const fn hisi_rf_core::DiagnosticTrace::is_empty(self) -> bool
+pub const fn hisi_rf_core::DiagnosticTrace::is_truncated(self) -> bool
+pub const fn hisi_rf_core::DiagnosticTrace::len(self) -> usize
+pub const fn hisi_rf_core::DiagnosticTrace::new() -> Self
+impl core::default::Default for hisi_rf_core::DiagnosticTrace
+pub fn hisi_rf_core::DiagnosticTrace::default() -> Self
+pub struct hisi_rf_core::DiagnosticTraceEntry
+impl hisi_rf_core::DiagnosticTraceEntry
+pub const fn hisi_rf_core::DiagnosticTraceEntry::kind(self) -> hisi_rf_core::DiagnosticTraceKind
+pub const fn hisi_rf_core::DiagnosticTraceEntry::value(self) -> u32
+pub struct hisi_rf_core::EventDiagnostics
+pub hisi_rf_core::EventDiagnostics::capacity: usize
+pub hisi_rf_core::EventDiagnostics::dropped: u32
+pub hisi_rf_core::EventDiagnostics::high_water: usize
+pub hisi_rf_core::EventDiagnostics::pending: usize
+pub struct hisi_rf_core::FairWakeSelector
+impl hisi_rf_core::FairWakeSelector
+pub const fn hisi_rf_core::FairWakeSelector::new() -> Self
+pub fn hisi_rf_core::FairWakeSelector::select(&mut self, hisi_rf_core::WaitSet, hisi_rf_core::WaitSet) -> core::option::Option<hisi_rf_core::WakeReason>
+pub struct hisi_rf_core::IncrementalBackendDriver<B>
+impl<B: hisi_rf_core::IncrementalWifiBackend> hisi_rf_core::IncrementalBackendDriver<B>
+pub const fn hisi_rf_core::IncrementalBackendDriver<B>::backend(&self) -> &B
+pub const fn hisi_rf_core::IncrementalBackendDriver<B>::can_submit(&self) -> bool
+pub fn hisi_rf_core::IncrementalBackendDriver<B>::drive_once(&mut self, hisi_rf_core::WaitSet, &mut [hisi_rf_core::ScanResult]) -> core::result::Result<hisi_rf_core::IncrementalDriverEvent, hisi_rf_core::IncrementalDriverError>
+pub fn hisi_rf_core::IncrementalBackendDriver<B>::into_backend(self) -> B
+pub const fn hisi_rf_core::IncrementalBackendDriver<B>::new(B, hisi_rf_core::WorkBudget) -> Self
+pub fn hisi_rf_core::IncrementalBackendDriver<B>::next_deadline_us(&self) -> core::option::Option<u64>
+pub fn hisi_rf_core::IncrementalBackendDriver<B>::submit(&mut self, hisi_rf_core::CommandSequence, hisi_rf_core::IncrementalRequest) -> core::result::Result<(), hisi_rf_core::SubmitError<hisi_rf_core::IncrementalRequest>>
+pub fn hisi_rf_core::IncrementalBackendDriver<B>::wait_intent(&self) -> hisi_rf_core::IncrementalWaitIntent
+pub struct hisi_rf_core::IncrementalRadioParts<B, D, const EVENTS: usize>
+pub hisi_rf_core::IncrementalRadioParts::runner: hisi_rf_core::IncrementalRadioRunner<B, EVENTS>
+pub hisi_rf_core::IncrementalRadioParts::wifi: hisi_rf_core::WifiParts<D, EVENTS>
+pub struct hisi_rf_core::IncrementalRadioRunner<B, const EVENTS: usize>
+impl<B: hisi_rf_core::IncrementalWifiBackend, const EVENTS: usize> hisi_rf_core::IncrementalRadioRunner<B, EVENTS>
+pub const fn hisi_rf_core::IncrementalRadioRunner<B, EVENTS>::backend(&self) -> &B
+pub fn hisi_rf_core::IncrementalRadioRunner<B, EVENTS>::diagnostics(&self) -> hisi_rf_core::IncrementalRunnerDiagnostics
+pub fn hisi_rf_core::IncrementalRadioRunner<B, EVENTS>::next_deadline_us(&self) -> core::option::Option<u64>
+pub fn hisi_rf_core::IncrementalRadioRunner<B, EVENTS>::run_once(&mut self, hisi_rf_core::WaitSet) -> core::result::Result<hisi_rf_core::IncrementalDriverEvent, hisi_rf_core::IncrementalRadioRunnerError>
+pub async fn hisi_rf_core::IncrementalRadioRunner<B, EVENTS>::wait_for_command(&self)
+pub fn hisi_rf_core::IncrementalRadioRunner<B, EVENTS>::wait_intent(&self) -> hisi_rf_core::IncrementalWaitIntent
+pub async fn hisi_rf_core::IncrementalRadioRunner<B, EVENTS>::wait_ready<P: hisi_rf_core::IncrementalWaitPlatform>(&self, &mut P) -> core::result::Result<hisi_rf_core::WaitSet, hisi_rf_core::IncrementalWaitError<<P as hisi_rf_core::IncrementalWaitPlatform>::Error>>
+pub struct hisi_rf_core::IncrementalRunnerDiagnostics
+pub hisi_rf_core::IncrementalRunnerDiagnostics::backend_ready_batches: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::budget_exhaustions: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::cancellations_requested: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::command_ready_batches: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::driver_errors: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::immediate_ready_completions: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::l2_rx_ready_batches: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::operations_cancelled: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::operations_completed: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::operations_failed: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::operations_started: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::pending_polls: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::protocol_errors: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::run_once_calls: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::timer_ready_batches: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::wait_ready_calls: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::wait_ready_completions: u32
+pub hisi_rf_core::IncrementalRunnerDiagnostics::wait_ready_errors: u32
+pub struct hisi_rf_core::IncrementalRunnerState
+impl hisi_rf_core::IncrementalRunnerState
+pub fn hisi_rf_core::IncrementalRunnerState::apply_error(&mut self, hisi_rf_core::OperationId, hisi_rf_core::BackendError) -> core::result::Result<hisi_rf_core::RunnerTransition, hisi_rf_core::RunnerStateError>
+pub fn hisi_rf_core::IncrementalRunnerState::apply_report(&mut self, hisi_rf_core::OperationId, hisi_rf_core::WorkReport) -> core::result::Result<hisi_rf_core::RunnerTransition, hisi_rf_core::RunnerStateError>
+pub const fn hisi_rf_core::IncrementalRunnerState::current(&self) -> core::option::Option<(hisi_rf_core::OperationId, hisi_rf_core::OperationLifecycle)>
+pub fn hisi_rf_core::IncrementalRunnerState::mark_cancel_notified(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::RunnerStateError>
+pub fn hisi_rf_core::IncrementalRunnerState::mark_started(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::RunnerStateError>
+pub const fn hisi_rf_core::IncrementalRunnerState::new() -> Self
+pub fn hisi_rf_core::IncrementalRunnerState::queue(&mut self, u8) -> core::result::Result<hisi_rf_core::OperationId, hisi_rf_core::RunnerStateError>
+pub fn hisi_rf_core::IncrementalRunnerState::reap(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::RunnerStateError>
+pub fn hisi_rf_core::IncrementalRunnerState::reject_start(&mut self, hisi_rf_core::OperationId, hisi_rf_core::BackendError) -> core::result::Result<hisi_rf_core::RunnerTransition, hisi_rf_core::RunnerStateError>
+pub fn hisi_rf_core::IncrementalRunnerState::request_cancel(&mut self, hisi_rf_core::OperationId) -> core::result::Result<hisi_rf_core::CancelDirective, hisi_rf_core::RunnerStateError>
+pub fn hisi_rf_core::IncrementalRunnerState::select_step(&mut self, hisi_rf_core::WaitSet) -> hisi_rf_core::RunnerStep
+pub const fn hisi_rf_core::IncrementalRunnerState::wait_for(&self) -> hisi_rf_core::WaitSet
+impl core::default::Default for hisi_rf_core::IncrementalRunnerState
+pub fn hisi_rf_core::IncrementalRunnerState::default() -> Self
+pub struct hisi_rf_core::IncrementalWaitIntent
+impl hisi_rf_core::IncrementalWaitIntent
+pub const fn hisi_rf_core::IncrementalWaitIntent::deadline_us(self) -> core::option::Option<u64>
+pub const fn hisi_rf_core::IncrementalWaitIntent::run_immediately(self) -> bool
+pub const fn hisi_rf_core::IncrementalWaitIntent::sources(self) -> hisi_rf_core::WaitSet
+pub struct hisi_rf_core::OperationId
+impl hisi_rf_core::OperationId
+pub const fn hisi_rf_core::OperationId::generation(self) -> core::num::nonzero::NonZeroU32
+pub const fn hisi_rf_core::OperationId::slot(self) -> u8
+pub struct hisi_rf_core::OperationTracker
+impl hisi_rf_core::OperationTracker
+pub fn hisi_rf_core::OperationTracker::commit_terminal(&mut self, hisi_rf_core::OperationId) -> core::result::Result<bool, hisi_rf_core::OperationStateError>
+pub const fn hisi_rf_core::OperationTracker::current(&self) -> core::option::Option<(hisi_rf_core::OperationId, hisi_rf_core::OperationLifecycle)>
+pub fn hisi_rf_core::OperationTracker::lifecycle(&self, hisi_rf_core::OperationId) -> core::result::Result<hisi_rf_core::OperationLifecycle, hisi_rf_core::OperationStateError>
+pub fn hisi_rf_core::OperationTracker::mark_started(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::OperationStateError>
+pub const fn hisi_rf_core::OperationTracker::new() -> Self
+pub fn hisi_rf_core::OperationTracker::queue(&mut self, u8) -> core::result::Result<hisi_rf_core::OperationId, hisi_rf_core::OperationStateError>
+pub fn hisi_rf_core::OperationTracker::reap(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::OperationStateError>
+pub fn hisi_rf_core::OperationTracker::reject_queued(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::OperationStateError>
+pub fn hisi_rf_core::OperationTracker::request_cancel(&mut self, hisi_rf_core::OperationId) -> core::result::Result<hisi_rf_core::CancelOutcome, hisi_rf_core::OperationStateError>
+impl core::default::Default for hisi_rf_core::OperationTracker
+pub fn hisi_rf_core::OperationTracker::default() -> Self
+pub struct hisi_rf_core::Passphrase
+impl hisi_rf_core::Passphrase
+pub fn hisi_rf_core::Passphrase::expose_secret(&self) -> &[u8]
+pub fn hisi_rf_core::Passphrase::try_from_ascii(&[u8]) -> core::option::Option<Self>
+impl core::ops::drop::Drop for hisi_rf_core::Passphrase
+pub fn hisi_rf_core::Passphrase::drop(&mut self)
+pub struct hisi_rf_core::PendingCommand<C>
+impl<C> hisi_rf_core::PendingCommand<C>
+pub fn hisi_rf_core::PendingCommand<C>::into_inner(self) -> C
+pub const fn hisi_rf_core::PendingCommand<C>::new(hisi_rf_core::CommandSequence, C) -> Self
+pub const fn hisi_rf_core::PendingCommand<C>::sequence(&self) -> hisi_rf_core::CommandSequence
+#[non_exhaustive] pub struct hisi_rf_core::RadioConfig
+pub hisi_rf_core::RadioConfig::wifi: hisi_rf_core::WifiConfig
+pub struct hisi_rf_core::RadioController<B, D, const EVENTS: usize>
+impl<B, D, const EVENTS: usize> hisi_rf_core::RadioController<B, D, EVENTS>
+pub fn hisi_rf_core::RadioController<B, D, EVENTS>::split(self) -> hisi_rf_core::RadioParts<B, D, EVENTS>
+impl<B: hisi_rf_core::IncrementalWifiBackend, D, const EVENTS: usize> hisi_rf_core::RadioController<B, D, EVENTS>
+pub fn hisi_rf_core::RadioController<B, D, EVENTS>::split_incremental(self, hisi_rf_core::WorkBudget) -> hisi_rf_core::IncrementalRadioParts<B, D, EVENTS>
+pub struct hisi_rf_core::RadioParts<B, D, const EVENTS: usize>
+pub hisi_rf_core::RadioParts::runner: hisi_rf_core::RadioRunner<B, EVENTS>
+pub hisi_rf_core::RadioParts::wifi: hisi_rf_core::WifiParts<D, EVENTS>
+pub struct hisi_rf_core::RadioResources<B, D>
+pub hisi_rf_core::RadioResources::backend: B
+pub hisi_rf_core::RadioResources::device: D
+pub struct hisi_rf_core::RadioRunner<B, const EVENTS: usize>
+impl<B: hisi_rf_core::WifiBackend, const EVENTS: usize> hisi_rf_core::RadioRunner<B, EVENTS>
+pub async fn hisi_rf_core::RadioRunner<B, EVENTS>::run(self) -> never
+pub fn hisi_rf_core::RadioRunner<B, EVENTS>::run_once(&mut self) -> bool
+pub struct hisi_rf_core::RadioState<const EVENTS: usize>
+impl<const EVENTS: usize> hisi_rf_core::RadioState<EVENTS>
+pub const fn hisi_rf_core::RadioState<EVENTS>::new() -> Self
+impl<const EVENTS: usize> core::default::Default for hisi_rf_core::RadioState<EVENTS>
+pub fn hisi_rf_core::RadioState<EVENTS>::default() -> Self
+pub struct hisi_rf_core::ScanConfig
+impl hisi_rf_core::ScanConfig
+pub const fn hisi_rf_core::ScanConfig::timeout_ms(self) -> u32
+pub const fn hisi_rf_core::ScanConfig::try_from_timeout_ms(u32) -> core::option::Option<Self>
+pub struct hisi_rf_core::ScanOutcome
+pub hisi_rf_core::ScanOutcome::count: usize
+pub hisi_rf_core::ScanOutcome::truncated: bool
+pub struct hisi_rf_core::ScanResult
+pub hisi_rf_core::ScanResult::bssid: [u8; 6]
+pub hisi_rf_core::ScanResult::channel: u8
+pub hisi_rf_core::ScanResult::frequency_mhz: u16
+pub hisi_rf_core::ScanResult::rssi_dbm: i16
+pub hisi_rf_core::ScanResult::security: hisi_rf_core::Security
+pub hisi_rf_core::ScanResult::ssid: hisi_rf_core::Ssid
+impl hisi_rf_core::ScanResult
+pub const fn hisi_rf_core::ScanResult::empty() -> Self
+pub struct hisi_rf_core::Ssid
+impl hisi_rf_core::Ssid
+pub fn hisi_rf_core::Ssid::as_bytes(&self) -> &[u8]
+pub fn hisi_rf_core::Ssid::try_from_bytes(&[u8]) -> core::option::Option<Self>
+pub struct hisi_rf_core::StationConfig
+pub hisi_rf_core::StationConfig::bssid: [u8; 6]
+pub hisi_rf_core::StationConfig::channel: u8
+pub hisi_rf_core::StationConfig::passphrase: hisi_rf_core::Passphrase
+pub hisi_rf_core::StationConfig::ssid: hisi_rf_core::Ssid
+impl hisi_rf_core::StationConfig
+pub const fn hisi_rf_core::StationConfig::security(&self) -> hisi_rf_core::PersonalSecurity
+pub const fn hisi_rf_core::StationConfig::timeout_ms(&self) -> u32
+pub fn hisi_rf_core::StationConfig::wpa2_personal(&hisi_rf_core::ScanResult, hisi_rf_core::Passphrase, u32) -> core::option::Option<Self>
+pub fn hisi_rf_core::StationConfig::wpa3_personal(&hisi_rf_core::ScanResult, hisi_rf_core::Passphrase, hisi_rf_core::SaePwe, u32) -> core::option::Option<Self>
+pub struct hisi_rf_core::SubmitError<C>
+impl<C> hisi_rf_core::SubmitError<C>
+pub fn hisi_rf_core::SubmitError<C>::into_command(self) -> hisi_rf_core::PendingCommand<C>
+pub const fn hisi_rf_core::SubmitError<C>::reason(&self) -> hisi_rf_core::CommandArbiterError
+pub struct hisi_rf_core::WaitSet(_)
+impl hisi_rf_core::WaitSet
+pub const hisi_rf_core::WaitSet::BACKEND: Self
+pub const hisi_rf_core::WaitSet::COMMAND: Self
+pub const hisi_rf_core::WaitSet::L2_RX: Self
+pub const hisi_rf_core::WaitSet::TIMER: Self
+pub const fn hisi_rf_core::WaitSet::bits(self) -> u8
+pub const fn hisi_rf_core::WaitSet::contains(self, Self) -> bool
+pub const fn hisi_rf_core::WaitSet::empty() -> Self
+pub const fn hisi_rf_core::WaitSet::from_reason(hisi_rf_core::WakeReason) -> Self
+pub const fn hisi_rf_core::WaitSet::intersection(self, Self) -> Self
+pub const fn hisi_rf_core::WaitSet::intersects(self, Self) -> bool
+pub const fn hisi_rf_core::WaitSet::is_empty(self) -> bool
+pub const fn hisi_rf_core::WaitSet::union(self, Self) -> Self
+pub const fn hisi_rf_core::WaitSet::without(self, Self) -> Self
+pub struct hisi_rf_core::WifiConfig
+pub hisi_rf_core::WifiConfig::disconnect_timeout_ms: u32
+pub hisi_rf_core::WifiConfig::initialize_timeout_ms: u32
+impl core::default::Default for hisi_rf_core::WifiConfig
+pub fn hisi_rf_core::WifiConfig::default() -> Self
+pub struct hisi_rf_core::WifiController<const EVENTS: usize>
+impl<const EVENTS: usize> hisi_rf_core::WifiController<EVENTS>
+pub fn hisi_rf_core::WifiController<EVENTS>::blocking_runner_diagnostics(&self) -> hisi_rf_core::BlockingRunnerDiagnostics
+pub async fn hisi_rf_core::WifiController<EVENTS>::connect(&mut self, hisi_rf_core::StationConfig) -> core::result::Result<hisi_rf_core::ConnectionInfo, hisi_rf_core::Error>
+pub async fn hisi_rf_core::WifiController<EVENTS>::disconnect(&mut self) -> core::result::Result<(), hisi_rf_core::Error>
+pub fn hisi_rf_core::WifiController<EVENTS>::event_diagnostics(&self) -> hisi_rf_core::EventDiagnostics
+pub async fn hisi_rf_core::WifiController<EVENTS>::initialize(&mut self) -> core::result::Result<(), hisi_rf_core::Error>
+pub async fn hisi_rf_core::WifiController<EVENTS>::next_event(&mut self) -> hisi_rf_core::WifiEvent
+pub async fn hisi_rf_core::WifiController<EVENTS>::scan(&mut self, hisi_rf_core::ScanConfig, &mut [hisi_rf_core::ScanResult]) -> core::result::Result<hisi_rf_core::ScanOutcome, hisi_rf_core::Error>
+pub struct hisi_rf_core::WifiDevice<D>
+impl<D> hisi_rf_core::WifiDevice<D>
+pub fn hisi_rf_core::WifiDevice<D>::inner(&self) -> &D
+pub fn hisi_rf_core::WifiDevice<D>::inner_mut(&mut self) -> &mut D
+pub fn hisi_rf_core::WifiDevice<D>::into_inner(self) -> D
+impl<D: smoltcp::phy::Device> smoltcp::phy::Device for hisi_rf_core::WifiDevice<D>
+pub type hisi_rf_core::WifiDevice<D>::RxToken<'a> where Self: 'a = <D as smoltcp::phy::Device>::RxToken
+pub type hisi_rf_core::WifiDevice<D>::TxToken<'a> where Self: 'a = <D as smoltcp::phy::Device>::TxToken
+pub fn hisi_rf_core::WifiDevice<D>::capabilities(&self) -> smoltcp::phy::DeviceCapabilities
+pub fn hisi_rf_core::WifiDevice<D>::receive(&mut self, smoltcp::time::Instant) -> core::option::Option<(Self::RxToken, Self::TxToken)>
+pub fn hisi_rf_core::WifiDevice<D>::transmit(&mut self, smoltcp::time::Instant) -> core::option::Option<Self::TxToken>
+pub struct hisi_rf_core::WifiParts<D, const EVENTS: usize>
+pub hisi_rf_core::WifiParts::controller: hisi_rf_core::WifiController<EVENTS>
+pub hisi_rf_core::WifiParts::device: hisi_rf_core::WifiDevice<D>
+pub struct hisi_rf_core::WorkBudget
+impl hisi_rf_core::WorkBudget
+pub const fn hisi_rf_core::WorkBudget::max_events(self) -> core::num::nonzero::NonZeroU16
+pub const fn hisi_rf_core::WorkBudget::max_time_us(self) -> core::num::nonzero::NonZeroU32
+pub const fn hisi_rf_core::WorkBudget::try_new(u16, u32) -> core::option::Option<Self>
+pub struct hisi_rf_core::WorkReport
+impl hisi_rf_core::WorkReport
+pub const fn hisi_rf_core::WorkReport::consumed_events(self) -> u16
+pub const fn hisi_rf_core::WorkReport::disposition(self) -> hisi_rf_core::PollDisposition
+pub const fn hisi_rf_core::WorkReport::elapsed_us(self) -> u32
+pub const fn hisi_rf_core::WorkReport::made_progress(self) -> bool
+pub const fn hisi_rf_core::WorkReport::operation(self) -> hisi_rf_core::OperationId
+pub const fn hisi_rf_core::WorkReport::try_new(hisi_rf_core::OperationId, hisi_rf_core::WorkBudget, u16, u32, bool, hisi_rf_core::PollDisposition) -> core::option::Option<Self>
+pub const hisi_rf_core::DIAGNOSTIC_SCHEMA: &str
+pub const hisi_rf_core::DIAGNOSTIC_TRACE_CAPACITY: usize
+pub trait hisi_rf_core::IncrementalWaitPlatform
+pub type hisi_rf_core::IncrementalWaitPlatform::Error
+pub fn hisi_rf_core::IncrementalWaitPlatform::poll_ready(&mut self, &mut core::task::wake::Context<'_>, hisi_rf_core::WaitSet, core::option::Option<u64>) -> core::task::poll::Poll<core::result::Result<hisi_rf_core::WaitSet, Self::Error>>
+pub trait hisi_rf_core::IncrementalWifiBackend
+pub fn hisi_rf_core::IncrementalWifiBackend::cancel(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::BackendError>
+pub fn hisi_rf_core::IncrementalWifiBackend::next_deadline_us(&self, hisi_rf_core::OperationId) -> core::option::Option<u64>
+pub fn hisi_rf_core::IncrementalWifiBackend::poll(&mut self, hisi_rf_core::OperationId, hisi_rf_core::WakeReason, hisi_rf_core::WorkBudget, &mut [hisi_rf_core::ScanResult]) -> core::result::Result<hisi_rf_core::WorkReport, hisi_rf_core::BackendError>
+pub fn hisi_rf_core::IncrementalWifiBackend::start(&mut self, hisi_rf_core::OperationId, hisi_rf_core::IncrementalRequest) -> core::result::Result<(), hisi_rf_core::BackendError>
+pub trait hisi_rf_core::WifiBackend
+pub fn hisi_rf_core::WifiBackend::connect(&mut self, &hisi_rf_core::StationConfig) -> core::result::Result<hisi_rf_core::ConnectionInfo, hisi_rf_core::BackendError>
+pub fn hisi_rf_core::WifiBackend::disconnect(&mut self, &hisi_rf_core::WifiConfig) -> core::result::Result<(), hisi_rf_core::BackendError>
+pub fn hisi_rf_core::WifiBackend::initialize(&mut self, &hisi_rf_core::WifiConfig) -> core::result::Result<(), hisi_rf_core::BackendError>
+pub fn hisi_rf_core::WifiBackend::poll(&mut self) -> core::result::Result<bool, hisi_rf_core::BackendError>
+pub fn hisi_rf_core::WifiBackend::scan(&mut self, hisi_rf_core::ScanConfig, &mut [hisi_rf_core::ScanResult]) -> core::result::Result<hisi_rf_core::ScanOutcome, hisi_rf_core::BackendError>
+pub fn hisi_rf_core::init<B, D, const EVENTS: usize>(hisi_rf_core::RadioConfig, hisi_rf_core::RadioResources<B, D>, &'static hisi_rf_core::RadioState<EVENTS>) -> core::result::Result<hisi_rf_core::RadioController<B, D, EVENTS>, hisi_rf_core::Error>

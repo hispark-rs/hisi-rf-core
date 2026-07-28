@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a pinned `cargo-public-api` snapshot for the complete all-features
+  chip-neutral contract, so incremental controller, lifecycle, wait-set and
+  diagnostic API changes require an explicit reviewed baseline update.
+
 ## [0.1.0-alpha.16] - 2026-07-28
 
 ### Changed
