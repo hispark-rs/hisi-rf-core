@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.15] - 2026-07-28
+
 ### Fixed
 
 - Preserve an incremental backend's immediate local continuation when an
