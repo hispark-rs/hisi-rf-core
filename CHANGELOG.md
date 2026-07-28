@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.16] - 2026-07-28
+
+### Changed
+
+- Defined incremental backend `start` and `cancel` as bounded in-memory state
+  transitions; vendor, transport, and hardware work is now advanced only by
+  budgeted `poll` calls.
+- Schedule an immediate first poll after start and cancellation notification,
+  avoiding deadlock when no external wake source exists yet.
+
 ## [0.1.0-alpha.15] - 2026-07-28
 
 ### Fixed

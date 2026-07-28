@@ -547,6 +547,7 @@ mod tests {
         force_mismatch: bool,
         cancel_calls: u8,
         deadline_us: Option<u64>,
+        pending_polls: u8,
     }
 
     impl FakeBackend {
@@ -556,6 +557,7 @@ mod tests {
                 force_mismatch: false,
                 cancel_calls: 0,
                 deadline_us: None,
+                pending_polls: 0,
             }
         }
 
@@ -565,6 +567,7 @@ mod tests {
                 force_mismatch: true,
                 cancel_calls: 0,
                 deadline_us: None,
+                pending_polls: 0,
             }
         }
 
@@ -574,6 +577,17 @@ mod tests {
                 force_mismatch: false,
                 cancel_calls: 0,
                 deadline_us: Some(deadline_us),
+                pending_polls: 1,
+            }
+        }
+
+        const fn pending_once() -> Self {
+            Self {
+                completion: None,
+                force_mismatch: false,
+                cancel_calls: 0,
+                deadline_us: None,
+                pending_polls: 1,
             }
         }
     }
@@ -613,6 +627,18 @@ mod tests {
             scan_output: &mut [ScanResult],
         ) -> Result<WorkReport, BackendError> {
             let completion = self.completion.expect("start precedes poll");
+            if self.pending_polls != 0 {
+                self.pending_polls -= 1;
+                return Ok(WorkReport::try_new(
+                    id,
+                    budget,
+                    1,
+                    1,
+                    true,
+                    PollDisposition::Pending(WaitSet::BACKEND),
+                )
+                .unwrap());
+            }
             if matches!(completion, IncrementalCompletion::Scan(_)) {
                 scan_output[0] = ScanResult {
                     ssid: Ssid::try_from_bytes(b"test-ap").unwrap(),
@@ -716,6 +742,10 @@ mod tests {
             runner.run_once(WaitSet::empty()).unwrap(),
             IncrementalDriverEvent::Started { .. }
         ));
+        assert!(matches!(
+            runner.run_once(WaitSet::empty()).unwrap(),
+            IncrementalDriverEvent::Pending { .. }
+        ));
 
         platform.ready = WaitSet::TIMER;
         {
@@ -735,12 +765,13 @@ mod tests {
         assert_eq!(
             runner.diagnostics(),
             IncrementalRunnerDiagnostics {
-                run_once_calls: 2,
+                run_once_calls: 3,
                 timer_ready_batches: 2,
                 wait_ready_calls: 2,
                 wait_ready_completions: 2,
                 immediate_ready_completions: 1,
                 operations_started: 1,
+                pending_polls: 1,
                 operations_completed: 1,
                 ..IncrementalRunnerDiagnostics::EMPTY
             }
@@ -753,7 +784,7 @@ mod tests {
         let radio = init(
             RadioConfig::default(),
             RadioResources {
-                backend: FakeBackend::new(),
+                backend: FakeBackend::pending_once(),
                 device: (),
             },
             state,
@@ -765,6 +796,7 @@ mod tests {
         } = radio.split_incremental(budget());
         let mut initialize = core::pin::pin!(wifi.controller.initialize());
         assert!(poll(initialize.as_mut()).is_pending());
+        let _ = runner.run_once(WaitSet::empty()).unwrap();
         let _ = runner.run_once(WaitSet::empty()).unwrap();
 
         let mut failed = FakeWaitPlatform {
@@ -839,12 +871,10 @@ mod tests {
                 runner.run_once(WaitSet::empty()).unwrap(),
                 IncrementalDriverEvent::Started { .. }
             ));
-            assert_eq!(
-                runner.wait_intent().sources(),
-                WaitSet::BACKEND.union(WaitSet::COMMAND)
-            );
+            assert_eq!(runner.wait_intent().sources(), WaitSet::COMMAND);
+            assert!(runner.wait_intent().run_immediately());
             assert!(matches!(
-                runner.run_once(WaitSet::BACKEND).unwrap(),
+                runner.run_once(WaitSet::empty()).unwrap(),
                 IncrementalDriverEvent::Completed {
                     completion: IncrementalCompletion::Initialized,
                     ..
@@ -861,7 +891,7 @@ mod tests {
             ));
             assert!(poll(scan.as_mut()).is_pending());
             let _ = runner.run_once(WaitSet::empty()).unwrap();
-            let _ = runner.run_once(WaitSet::BACKEND).unwrap();
+            let _ = runner.run_once(WaitSet::empty()).unwrap();
             assert_eq!(
                 poll(scan.as_mut()),
                 Poll::Ready(Ok(ScanOutcome {
@@ -957,14 +987,14 @@ mod tests {
         assert!(poll(third.as_mut()).is_pending());
 
         let backpressured = runner.wait_intent();
-        assert_eq!(backpressured.sources(), WaitSet::BACKEND);
+        assert_eq!(backpressured.sources(), WaitSet::empty());
         assert!(!backpressured.sources().contains(WaitSet::COMMAND));
-        assert!(!backpressured.run_immediately());
+        assert!(backpressured.run_immediately());
 
         // The third command remains in the facade channel until the pending
         // second command has started; it is not rejected as over-capacity.
         assert!(matches!(
-            runner.run_once(WaitSet::BACKEND).unwrap(),
+            runner.run_once(WaitSet::empty()).unwrap(),
             IncrementalDriverEvent::Cancelled { .. }
         ));
         assert!(runner.wait_intent().run_immediately());
@@ -980,7 +1010,7 @@ mod tests {
             IncrementalDriverEvent::CancelRequested { .. }
         ));
         assert!(matches!(
-            runner.run_once(WaitSet::BACKEND).unwrap(),
+            runner.run_once(WaitSet::empty()).unwrap(),
             IncrementalDriverEvent::Cancelled { .. }
         ));
         assert!(matches!(

@@ -505,10 +505,13 @@ impl WorkReport {
 /// Opt-in bounded backend contract used by the A5B prototype.
 ///
 /// `start`, `poll`, and `cancel` are called only by the unique radio runner.
-/// Implementations must not invoke application callbacks. All long-running work
-/// is advanced by repeated bounded `poll` calls.
+/// Implementations must not invoke application callbacks. `start` and `cancel`
+/// may only update bounded in-memory operation state; they must not enter
+/// vendor, transport, or hardware operations. All such work is advanced by
+/// repeated bounded `poll` calls. After `start` succeeds, the runner grants one
+/// immediate poll turn before waiting for an external source.
 pub trait IncrementalWifiBackend {
-    /// Accept an operation identity and owned request.
+    /// Accept an operation identity and owned request without external work.
     fn start(&mut self, id: OperationId, request: IncrementalRequest) -> Result<(), BackendError>;
 
     /// Advance one operation without exceeding `budget`.
@@ -520,7 +523,10 @@ pub trait IncrementalWifiBackend {
         scan_output: &mut [ScanResult],
     ) -> Result<WorkReport, BackendError>;
 
-    /// Request cancellation. Terminal cancellation is observed through `poll`.
+    /// Record cancellation without external work.
+    ///
+    /// Any disconnect, scan abort, or key cleanup is advanced by `poll`.
+    /// Terminal cancellation is also observed through `poll`.
     fn cancel(&mut self, id: OperationId) -> Result<(), BackendError>;
 
     /// Monotonic deadline for the next timer wake, in microseconds.

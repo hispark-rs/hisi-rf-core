@@ -272,6 +272,7 @@ impl<B: IncrementalWifiBackend> IncrementalBackendDriver<B> {
             CancelDirective::AlreadyRequested => Err(CommandArbiterError::InvalidTransition.into()),
             CancelDirective::NotifyBackend => match self.backend.cancel(operation) {
                 Ok(()) => {
+                    self.runner.mark_cancel_notified(operation)?;
                     self.arbiter.mark_cancel_requested(operation)?;
                     Ok(IncrementalDriverEvent::CancelRequested {
                         sequence,
@@ -531,8 +532,8 @@ mod tests {
         let _ = driver.drive_once(WaitSet::empty(), &mut output).unwrap();
         let intent = driver.wait_intent();
         assert_eq!(intent.deadline_us(), Some(42));
-        assert_eq!(intent.sources(), WaitSet::BACKEND.union(WaitSet::TIMER));
-        assert!(!intent.run_immediately());
+        assert_eq!(intent.sources(), WaitSet::TIMER);
+        assert!(intent.run_immediately());
     }
 
     #[test]
@@ -588,18 +589,14 @@ mod tests {
             }
         );
         assert_eq!(driver.backend().cancel_calls, 1);
-        assert!(matches!(
-            driver.drive_once(WaitSet::empty(), &mut output).unwrap(),
-            IncrementalDriverEvent::Waiting { .. }
-        ));
-        assert_eq!(driver.backend().cancel_calls, 1);
         assert_eq!(
-            driver.drive_once(WaitSet::BACKEND, &mut output).unwrap(),
+            driver.drive_once(WaitSet::empty(), &mut output).unwrap(),
             IncrementalDriverEvent::Cancelled {
                 sequence: command_sequence(1),
                 suppressed_completion: true,
             }
         );
+        assert_eq!(driver.backend().cancel_calls, 1);
         assert!(matches!(
             driver.drive_once(WaitSet::empty(), &mut output).unwrap(),
             IncrementalDriverEvent::Started {

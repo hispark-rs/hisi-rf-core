@@ -145,7 +145,10 @@ impl IncrementalRunnerState {
     /// Record that the backend accepted a queued request.
     pub fn mark_started(&mut self, id: OperationId) -> Result<(), RunnerStateError> {
         self.tracker.mark_started(id)?;
-        self.wait_for = WaitSet::BACKEND;
+        // `start` only transfers owned request state into the backend. The
+        // runner owes the new operation one bounded poll turn before it can
+        // know which external wake sources are relevant.
+        self.wait_for = WaitSet::empty();
         Ok(())
     }
 
@@ -178,6 +181,18 @@ impl IncrementalRunnerState {
             self.wait_for = self.wait_for.union(WaitSet::BACKEND);
             Ok(CancelDirective::NotifyBackend)
         }
+    }
+
+    /// Record that the backend accepted the in-memory cancellation request.
+    ///
+    /// The backend receives one immediate bounded poll turn to perform any
+    /// external disconnect, scan-abort, or key-cleanup work.
+    pub fn mark_cancel_notified(&mut self, id: OperationId) -> Result<(), RunnerStateError> {
+        if self.tracker.lifecycle(id)? != OperationLifecycle::CancelRequested {
+            return Err(OperationStateError::InvalidTransition.into());
+        }
+        self.wait_for = WaitSet::empty();
+        Ok(())
     }
 
     /// Choose the next fair action from the currently ready sources.
