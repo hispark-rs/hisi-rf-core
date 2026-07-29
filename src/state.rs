@@ -3,9 +3,60 @@ use core::cell::UnsafeCell;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::signal::Signal;
-use portable_atomic::{AtomicBool, AtomicU32, Ordering};
+use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
-use crate::wifi::{Command, Completion, MAX_SCAN_RESULTS, ScanResult, WifiEvent};
+use crate::wifi::{
+    Command, Completion, MAX_SCAN_RESULTS, ScanResult, WifiEvent, WifiL2Capabilities,
+};
+
+pub(crate) struct L2CapabilityState {
+    valid: AtomicBool,
+    station_mac_address: [AtomicU8; 6],
+}
+
+impl L2CapabilityState {
+    const fn new() -> Self {
+        Self {
+            valid: AtomicBool::new(false),
+            station_mac_address: [
+                AtomicU8::new(0),
+                AtomicU8::new(0),
+                AtomicU8::new(0),
+                AtomicU8::new(0),
+                AtomicU8::new(0),
+                AtomicU8::new(0),
+            ],
+        }
+    }
+
+    pub(crate) fn publish_once(&self, capabilities: WifiL2Capabilities) {
+        if self.valid.load(Ordering::Acquire) {
+            return;
+        }
+        for (destination, byte) in self
+            .station_mac_address
+            .iter()
+            .zip(capabilities.station_mac_address())
+        {
+            destination.store(byte, Ordering::Relaxed);
+        }
+        self.valid.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn snapshot(&self) -> Option<WifiL2Capabilities> {
+        if !self.valid.load(Ordering::Acquire) {
+            return None;
+        }
+        let mut station_mac_address = [0; 6];
+        for (destination, source) in station_mac_address
+            .iter_mut()
+            .zip(&self.station_mac_address)
+        {
+            *destination = source.load(Ordering::Relaxed);
+        }
+        WifiL2Capabilities::try_new(station_mac_address)
+    }
+}
 
 pub(crate) struct SharedState<const EVENTS: usize> {
     claimed: AtomicBool,
@@ -22,6 +73,7 @@ pub(crate) struct SharedState<const EVENTS: usize> {
     pub(crate) backend_poll_work_batches: AtomicU32,
     pub(crate) backend_poll_errors: AtomicU32,
     pub(crate) immediate_repoll_hints: AtomicU32,
+    pub(crate) l2_capabilities: L2CapabilityState,
     scan_results: UnsafeCell<[ScanResult; MAX_SCAN_RESULTS]>,
 }
 
@@ -50,6 +102,7 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
             backend_poll_work_batches: AtomicU32::new(0),
             backend_poll_errors: AtomicU32::new(0),
             immediate_repoll_hints: AtomicU32::new(0),
+            l2_capabilities: L2CapabilityState::new(),
             scan_results: UnsafeCell::new([ScanResult::EMPTY; MAX_SCAN_RESULTS]),
         }
     }

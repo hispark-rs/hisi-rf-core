@@ -533,6 +533,11 @@ pub trait IncrementalWifiBackend {
 
     /// Monotonic deadline for the next timer wake, in microseconds.
     fn next_deadline_us(&self, id: OperationId) -> Option<u64>;
+
+    /// Snapshot immutable L2 identity after initialization completes.
+    fn l2_capabilities(&self) -> Option<crate::WifiL2Capabilities> {
+        None
+    }
 }
 
 #[cfg(test)]

@@ -81,6 +81,36 @@ impl BackendTimeout {
     }
 }
 
+/// Immutable link-layer identity published by one initialized Wi-Fi backend.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiL2Capabilities {
+    station_mac_address: [u8; 6],
+}
+
+impl WifiL2Capabilities {
+    /// Validate a non-zero unicast station MAC address.
+    pub const fn try_new(station_mac_address: [u8; 6]) -> Option<Self> {
+        let any_nonzero = station_mac_address[0]
+            | station_mac_address[1]
+            | station_mac_address[2]
+            | station_mac_address[3]
+            | station_mac_address[4]
+            | station_mac_address[5];
+        if any_nonzero == 0 || station_mac_address[0] & 1 != 0 {
+            None
+        } else {
+            Some(Self {
+                station_mac_address,
+            })
+        }
+    }
+
+    /// Return the station MAC address owned by this radio instance.
+    pub const fn station_mac_address(self) -> [u8; 6] {
+        self.station_mac_address
+    }
+}
+
 /// Validated IEEE 802.11 SSID bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ssid {
@@ -488,6 +518,14 @@ pub trait WifiBackend {
     /// Disconnect the station interface.
     fn disconnect(&mut self, config: &WifiConfig) -> Result<(), BackendError>;
 
+    /// Snapshot immutable L2 identity after successful initialization.
+    ///
+    /// The runner publishes the first returned value into this radio
+    /// instance's state. It never exposes an unowned process-global accessor.
+    fn l2_capabilities(&self) -> Option<WifiL2Capabilities> {
+        None
+    }
+
     /// Advance bounded background work owned by the radio runner.
     ///
     /// Push-only backends may keep the default implementation. Host-side
@@ -580,6 +618,7 @@ impl<B, D, const EVENTS: usize> RadioController<B, D, EVENTS> {
                 },
                 device: WifiDevice {
                     inner: self.resources.device,
+                    l2_capabilities: &self.state.shared.l2_capabilities,
                 },
             },
             self.resources.backend,
@@ -906,6 +945,11 @@ impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
         let completion = match command.kind {
             CommandKind::Initialize => {
                 let result = self.backend.initialize(&self.config);
+                if result.is_ok()
+                    && let Some(capabilities) = self.backend.l2_capabilities()
+                {
+                    self.state.shared.l2_capabilities.publish_once(capabilities);
+                }
                 self.publish_result(result, WifiEvent::Initialized);
                 CompletionKind::Initialize(result)
             }
@@ -954,9 +998,23 @@ impl<B: WifiBackend, const EVENTS: usize> RadioRunner<B, EVENTS> {
 /// L2 data-plane ownership independent of the control backend.
 pub struct WifiDevice<D> {
     inner: D,
+    l2_capabilities: &'static crate::state::L2CapabilityState,
 }
 
 impl<D> WifiDevice<D> {
+    /// Snapshot immutable link-layer identity for this radio instance.
+    ///
+    /// Returns `None` until the instance's backend initialization succeeds.
+    pub fn l2_capabilities(&self) -> Option<WifiL2Capabilities> {
+        self.l2_capabilities.snapshot()
+    }
+
+    /// Return this radio instance's station MAC address after initialization.
+    pub fn station_mac_address(&self) -> Option<[u8; 6]> {
+        self.l2_capabilities()
+            .map(WifiL2Capabilities::station_mac_address)
+    }
+
     /// Borrow the chip L2 device.
     pub fn inner(&self) -> &D {
         &self.inner
@@ -1038,17 +1096,30 @@ mod tests {
 
     use super::*;
 
-    #[derive(Default)]
     struct MockBackend {
         calls: u8,
         poll_work: bool,
         poll_error: Option<BackendError>,
+        initialize_error: Option<BackendError>,
+        station_mac_address: [u8; 6],
+    }
+
+    impl Default for MockBackend {
+        fn default() -> Self {
+            Self {
+                calls: 0,
+                poll_work: false,
+                poll_error: None,
+                initialize_error: None,
+                station_mac_address: [0x02, 1, 2, 3, 4, 5],
+            }
+        }
     }
 
     impl WifiBackend for MockBackend {
         fn initialize(&mut self, _: &WifiConfig) -> Result<(), BackendError> {
             self.calls += 1;
-            Ok(())
+            self.initialize_error.map_or(Ok(()), Err)
         }
 
         fn scan(
@@ -1084,6 +1155,10 @@ mod tests {
             Ok(())
         }
 
+        fn l2_capabilities(&self) -> Option<WifiL2Capabilities> {
+            WifiL2Capabilities::try_new(self.station_mac_address)
+        }
+
         fn poll(&mut self) -> Result<bool, BackendError> {
             if let Some(error) = self.poll_error {
                 Err(error)
@@ -1114,6 +1189,7 @@ mod tests {
             mut wifi,
             mut runner,
         } = radio.split();
+        assert_eq!(wifi.device.l2_capabilities(), None);
 
         {
             let mut initialize = core::pin::pin!(wifi.controller.initialize());
@@ -1123,6 +1199,14 @@ mod tests {
             assert!(runner.run_once());
             assert_eq!(poll(initialize.as_mut()), Poll::Ready(Ok(())));
         }
+        assert_eq!(
+            wifi.device.l2_capabilities(),
+            WifiL2Capabilities::try_new([0x02, 1, 2, 3, 4, 5])
+        );
+        assert_eq!(
+            wifi.device.station_mac_address(),
+            Some([0x02, 1, 2, 3, 4, 5])
+        );
 
         let mut results = [ScanResult::EMPTY; 1];
         {
@@ -1141,6 +1225,89 @@ mod tests {
             );
         }
         assert_eq!(results[0].ssid.as_bytes(), b"test-ap");
+    }
+
+    #[test]
+    fn failed_initialization_does_not_publish_l2_capabilities() {
+        let state = Box::leak(Box::new(RadioState::<2>::new()));
+        let error = BackendError::new(BackendErrorClass::Initialize, 7);
+        let radio = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: MockBackend {
+                    initialize_error: Some(error),
+                    ..MockBackend::default()
+                },
+                device: (),
+            },
+            state,
+        )
+        .unwrap();
+        let RadioParts {
+            mut wifi,
+            mut runner,
+        } = radio.split();
+
+        let mut initialize = core::pin::pin!(wifi.controller.initialize());
+        assert!(poll(initialize.as_mut()).is_pending());
+        assert!(runner.run_once());
+        assert_eq!(
+            poll(initialize.as_mut()),
+            Poll::Ready(Err(Error::Backend(error)))
+        );
+        assert_eq!(wifi.device.l2_capabilities(), None);
+        assert_eq!(wifi.device.station_mac_address(), None);
+    }
+
+    #[test]
+    fn l2_capabilities_are_owned_by_each_radio_instance() {
+        let state_a = Box::leak(Box::new(RadioState::<2>::new()));
+        let state_b = Box::leak(Box::new(RadioState::<2>::new()));
+        let mac_a = [0x02, 1, 1, 1, 1, 1];
+        let mac_b = [0x02, 2, 2, 2, 2, 2];
+        let radio_a = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: MockBackend {
+                    station_mac_address: mac_a,
+                    ..MockBackend::default()
+                },
+                device: (),
+            },
+            state_a,
+        )
+        .unwrap();
+        let radio_b = init(
+            RadioConfig::default(),
+            RadioResources {
+                backend: MockBackend {
+                    station_mac_address: mac_b,
+                    ..MockBackend::default()
+                },
+                device: (),
+            },
+            state_b,
+        )
+        .unwrap();
+        let RadioParts {
+            wifi: mut wifi_a,
+            runner: mut runner_a,
+        } = radio_a.split();
+        let RadioParts {
+            wifi: mut wifi_b,
+            runner: mut runner_b,
+        } = radio_b.split();
+
+        let mut initialize_a = core::pin::pin!(wifi_a.controller.initialize());
+        let mut initialize_b = core::pin::pin!(wifi_b.controller.initialize());
+        assert!(poll(initialize_a.as_mut()).is_pending());
+        assert!(poll(initialize_b.as_mut()).is_pending());
+        assert!(runner_a.run_once());
+        assert!(runner_b.run_once());
+        assert_eq!(poll(initialize_a.as_mut()), Poll::Ready(Ok(())));
+        assert_eq!(poll(initialize_b.as_mut()), Poll::Ready(Ok(())));
+        assert_eq!(wifi_a.device.station_mac_address(), Some(mac_a));
+        assert_eq!(wifi_b.device.station_mac_address(), Some(mac_b));
     }
 
     #[test]
@@ -1323,6 +1490,14 @@ mod tests {
         assert!(BackendTimeout::try_from_millis(0).is_none());
         assert_eq!(OperationTimeout::try_from_millis(1).unwrap().as_millis(), 1);
         assert_eq!(BackendTimeout::try_from_millis(1).unwrap().as_millis(), 1);
+        assert!(WifiL2Capabilities::try_new([0; 6]).is_none());
+        assert!(WifiL2Capabilities::try_new([1, 2, 3, 4, 5, 6]).is_none());
+        assert_eq!(
+            WifiL2Capabilities::try_new([0x02, 1, 2, 3, 4, 5])
+                .unwrap()
+                .station_mac_address(),
+            [0x02, 1, 2, 3, 4, 5]
+        );
     }
 
     #[test]

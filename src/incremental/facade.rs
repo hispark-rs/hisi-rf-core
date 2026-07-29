@@ -480,6 +480,11 @@ impl<B: IncrementalWifiBackend, const EVENTS: usize> IncrementalRadioRunner<B, E
                     self.signal_protocol(sequence.get());
                     return Err(IncrementalRadioRunnerError::CompletionMismatch);
                 };
+                if matches!(kind, CommandKindTag::Initialize)
+                    && let Some(capabilities) = self.driver.backend().l2_capabilities()
+                {
+                    self.state.shared.l2_capabilities.publish_once(capabilities);
+                }
                 self.state.shared.publish_event(wifi_event);
                 self.state.shared.completion.signal(Completion {
                     sequence: sequence.get(),
@@ -703,6 +708,10 @@ mod tests {
         fn next_deadline_us(&self, _id: OperationId) -> Option<u64> {
             self.deadline_us
         }
+
+        fn l2_capabilities(&self) -> Option<crate::WifiL2Capabilities> {
+            crate::WifiL2Capabilities::try_new([0x02, 6, 5, 4, 3, 2])
+        }
     }
 
     #[derive(Default)]
@@ -764,6 +773,7 @@ mod tests {
         } = radio.split_incremental(budget());
         let mut platform = FakeWaitPlatform::default();
         let mut initialize = core::pin::pin!(wifi.controller.initialize());
+        assert_eq!(wifi.device.l2_capabilities(), None);
 
         {
             let mut wait = core::pin::pin!(runner.wait_ready(&mut platform));
@@ -797,6 +807,10 @@ mod tests {
             IncrementalDriverEvent::Completed { .. }
         ));
         assert_eq!(poll(initialize.as_mut()), Poll::Ready(Ok(())));
+        assert_eq!(
+            wifi.device.station_mac_address(),
+            Some([0x02, 6, 5, 4, 3, 2])
+        );
         assert_eq!(
             runner.diagnostics(),
             IncrementalRunnerDiagnostics {

@@ -37,7 +37,7 @@ pub use wifi::{
     EventDiagnostics, ManagementFrameProtection, OperationTimeout, Passphrase, PersonalSecurity,
     RadioConfig, RadioController, RadioParts, RadioResources, RadioRunner, RadioState, SaePwe,
     ScanConfig, ScanOutcome, ScanResult, Security, Ssid, StationConfig, WifiBackend, WifiConfig,
-    WifiController, WifiDevice, WifiEvent, WifiParts, init,
+    WifiController, WifiDevice, WifiEvent, WifiL2Capabilities, WifiParts, init,
 };
 
 /// Failure to establish or use the radio control plane.

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.18] - 2026-07-29
+
+### Added
+
+- Added an instance-owned `WifiL2Capabilities` snapshot, published only after
+  successful backend initialization and exposed through `WifiDevice`.
+- Added blocking and incremental backend hooks for publishing immutable L2
+  identity without exposing chip-global mutable state to applications.
+
+### Changed
+
+- Station MAC access now follows the `RadioState`/`WifiDevice` instance instead
+  of relying on a process-global backend accessor, preserving initialization
+  failure and future multi-instance isolation.
+
 ## [0.1.0-alpha.17] - 2026-07-29
 
 ### Added

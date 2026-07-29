@@ -503,12 +503,18 @@ impl<D> hisi_rf_core::WifiDevice<D>
 pub fn hisi_rf_core::WifiDevice<D>::inner(&self) -> &D
 pub fn hisi_rf_core::WifiDevice<D>::inner_mut(&mut self) -> &mut D
 pub fn hisi_rf_core::WifiDevice<D>::into_inner(self) -> D
+pub fn hisi_rf_core::WifiDevice<D>::l2_capabilities(&self) -> core::option::Option<hisi_rf_core::WifiL2Capabilities>
+pub fn hisi_rf_core::WifiDevice<D>::station_mac_address(&self) -> core::option::Option<[u8; 6]>
 impl<D: smoltcp::phy::Device> smoltcp::phy::Device for hisi_rf_core::WifiDevice<D>
 pub type hisi_rf_core::WifiDevice<D>::RxToken<'a> where Self: 'a = <D as smoltcp::phy::Device>::RxToken
 pub type hisi_rf_core::WifiDevice<D>::TxToken<'a> where Self: 'a = <D as smoltcp::phy::Device>::TxToken
 pub fn hisi_rf_core::WifiDevice<D>::capabilities(&self) -> smoltcp::phy::DeviceCapabilities
 pub fn hisi_rf_core::WifiDevice<D>::receive(&mut self, smoltcp::time::Instant) -> core::option::Option<(Self::RxToken, Self::TxToken)>
 pub fn hisi_rf_core::WifiDevice<D>::transmit(&mut self, smoltcp::time::Instant) -> core::option::Option<Self::TxToken>
+pub struct hisi_rf_core::WifiL2Capabilities
+impl hisi_rf_core::WifiL2Capabilities
+pub const fn hisi_rf_core::WifiL2Capabilities::station_mac_address(self) -> [u8; 6]
+pub const fn hisi_rf_core::WifiL2Capabilities::try_new([u8; 6]) -> core::option::Option<Self>
 pub struct hisi_rf_core::WifiParts<D, const EVENTS: usize>
 pub hisi_rf_core::WifiParts::controller: hisi_rf_core::WifiController<EVENTS>
 pub hisi_rf_core::WifiParts::device: hisi_rf_core::WifiDevice<D>
@@ -532,6 +538,7 @@ pub type hisi_rf_core::IncrementalWaitPlatform::Error
 pub fn hisi_rf_core::IncrementalWaitPlatform::poll_ready(&mut self, &mut core::task::wake::Context<'_>, hisi_rf_core::WaitSet, core::option::Option<u64>) -> core::task::poll::Poll<core::result::Result<hisi_rf_core::WaitSet, Self::Error>>
 pub trait hisi_rf_core::IncrementalWifiBackend
 pub fn hisi_rf_core::IncrementalWifiBackend::cancel(&mut self, hisi_rf_core::OperationId) -> core::result::Result<(), hisi_rf_core::BackendError>
+pub fn hisi_rf_core::IncrementalWifiBackend::l2_capabilities(&self) -> core::option::Option<hisi_rf_core::WifiL2Capabilities>
 pub fn hisi_rf_core::IncrementalWifiBackend::next_deadline_us(&self, hisi_rf_core::OperationId) -> core::option::Option<u64>
 pub fn hisi_rf_core::IncrementalWifiBackend::poll(&mut self, hisi_rf_core::OperationId, hisi_rf_core::WakeReason, hisi_rf_core::WorkBudget, &mut [hisi_rf_core::ScanResult]) -> core::result::Result<hisi_rf_core::WorkReport, hisi_rf_core::BackendError>
 pub fn hisi_rf_core::IncrementalWifiBackend::start(&mut self, hisi_rf_core::OperationId, hisi_rf_core::IncrementalRequest) -> core::result::Result<(), hisi_rf_core::BackendError>
@@ -539,6 +546,7 @@ pub trait hisi_rf_core::WifiBackend
 pub fn hisi_rf_core::WifiBackend::connect(&mut self, &hisi_rf_core::StationConfig) -> core::result::Result<hisi_rf_core::ConnectionInfo, hisi_rf_core::BackendError>
 pub fn hisi_rf_core::WifiBackend::disconnect(&mut self, &hisi_rf_core::WifiConfig) -> core::result::Result<(), hisi_rf_core::BackendError>
 pub fn hisi_rf_core::WifiBackend::initialize(&mut self, &hisi_rf_core::WifiConfig) -> core::result::Result<(), hisi_rf_core::BackendError>
+pub fn hisi_rf_core::WifiBackend::l2_capabilities(&self) -> core::option::Option<hisi_rf_core::WifiL2Capabilities>
 pub fn hisi_rf_core::WifiBackend::poll(&mut self) -> core::result::Result<bool, hisi_rf_core::BackendError>
 pub fn hisi_rf_core::WifiBackend::scan(&mut self, hisi_rf_core::ScanConfig, &mut [hisi_rf_core::ScanResult]) -> core::result::Result<hisi_rf_core::ScanOutcome, hisi_rf_core::BackendError>
 pub fn hisi_rf_core::init<B, D, const EVENTS: usize>(hisi_rf_core::RadioConfig, hisi_rf_core::RadioResources<B, D>, &'static hisi_rf_core::RadioState<EVENTS>) -> core::result::Result<hisi_rf_core::RadioController<B, D, EVENTS>, hisi_rf_core::Error>
