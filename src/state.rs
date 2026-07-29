@@ -5,9 +5,42 @@ use embassy_sync::channel::Channel;
 use embassy_sync::signal::Signal;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
+#[cfg(feature = "incremental-backend-experiment")]
+use crate::IncrementalRunnerDiagnostics;
 use crate::wifi::{
     Command, Completion, MAX_SCAN_RESULTS, ScanResult, WifiEvent, WifiL2Capabilities,
 };
+
+#[cfg(feature = "incremental-backend-experiment")]
+const INCREMENTAL_DIAGNOSTIC_COUNTERS: usize = 18;
+
+#[cfg(feature = "incremental-backend-experiment")]
+pub(crate) struct IncrementalDiagnosticsState {
+    counters: [AtomicU32; INCREMENTAL_DIAGNOSTIC_COUNTERS],
+}
+
+#[cfg(feature = "incremental-backend-experiment")]
+impl IncrementalDiagnosticsState {
+    const fn new() -> Self {
+        Self {
+            counters: [const { AtomicU32::new(0) }; INCREMENTAL_DIAGNOSTIC_COUNTERS],
+        }
+    }
+
+    pub(crate) fn publish(&self, value: IncrementalRunnerDiagnostics) {
+        for (counter, value) in self.counters.iter().zip(value.as_array()) {
+            counter.store(value, Ordering::Relaxed);
+        }
+    }
+
+    pub(crate) fn snapshot(&self) -> IncrementalRunnerDiagnostics {
+        let mut values = [0; INCREMENTAL_DIAGNOSTIC_COUNTERS];
+        for (value, counter) in values.iter_mut().zip(&self.counters) {
+            *value = counter.load(Ordering::Relaxed);
+        }
+        IncrementalRunnerDiagnostics::from_array(values)
+    }
+}
 
 pub(crate) struct L2CapabilityState {
     valid: AtomicBool,
@@ -73,6 +106,8 @@ pub(crate) struct SharedState<const EVENTS: usize> {
     pub(crate) backend_poll_work_batches: AtomicU32,
     pub(crate) backend_poll_errors: AtomicU32,
     pub(crate) immediate_repoll_hints: AtomicU32,
+    #[cfg(feature = "incremental-backend-experiment")]
+    pub(crate) incremental_diagnostics: IncrementalDiagnosticsState,
     pub(crate) l2_capabilities: L2CapabilityState,
     scan_results: UnsafeCell<[ScanResult; MAX_SCAN_RESULTS]>,
 }
@@ -102,6 +137,8 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
             backend_poll_work_batches: AtomicU32::new(0),
             backend_poll_errors: AtomicU32::new(0),
             immediate_repoll_hints: AtomicU32::new(0),
+            #[cfg(feature = "incremental-backend-experiment")]
+            incremental_diagnostics: IncrementalDiagnosticsState::new(),
             l2_capabilities: L2CapabilityState::new(),
             scan_results: UnsafeCell::new([ScanResult::EMPTY; MAX_SCAN_RESULTS]),
         }

@@ -495,6 +495,7 @@ pub fn hisi_rf_core::WifiController<EVENTS>::blocking_runner_diagnostics(&self) 
 pub async fn hisi_rf_core::WifiController<EVENTS>::connect(&mut self, hisi_rf_core::StationConfig) -> core::result::Result<hisi_rf_core::ConnectionInfo, hisi_rf_core::Error>
 pub async fn hisi_rf_core::WifiController<EVENTS>::disconnect(&mut self) -> core::result::Result<(), hisi_rf_core::Error>
 pub fn hisi_rf_core::WifiController<EVENTS>::event_diagnostics(&self) -> hisi_rf_core::EventDiagnostics
+pub fn hisi_rf_core::WifiController<EVENTS>::incremental_runner_diagnostics(&self) -> hisi_rf_core::IncrementalRunnerDiagnostics
 pub async fn hisi_rf_core::WifiController<EVENTS>::initialize(&mut self) -> core::result::Result<(), hisi_rf_core::Error>
 pub async fn hisi_rf_core::WifiController<EVENTS>::next_event(&mut self) -> hisi_rf_core::WifiEvent
 pub async fn hisi_rf_core::WifiController<EVENTS>::scan(&mut self, hisi_rf_core::ScanConfig, &mut [hisi_rf_core::ScanResult]) -> core::result::Result<hisi_rf_core::ScanOutcome, hisi_rf_core::Error>

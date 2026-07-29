@@ -845,6 +845,12 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
         }
     }
 
+    /// Snapshot the opt-in incremental runner counters for this radio instance.
+    #[cfg(feature = "incremental-backend-experiment")]
+    pub fn incremental_runner_diagnostics(&self) -> crate::IncrementalRunnerDiagnostics {
+        self.state.shared.incremental_diagnostics.snapshot()
+    }
+
     fn allocate_sequence(&mut self) -> u32 {
         self.next_sequence = self.next_sequence.wrapping_add(1);
         if self.next_sequence == 0 {

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.19] - 2026-07-29
+
+### Added
+
+- Added `WifiController::incremental_runner_diagnostics()` so a radio
+  instance's control task can read the runner counters without borrowing the
+  independently executing runner.
+
+### Changed
+
+- Published incremental counters into the owning `RadioState` through
+  observational atomics. The runner remains the only writer; snapshots are
+  allocation-free and do not participate in scheduling or wake decisions.
+
 ## [0.1.0-alpha.18] - 2026-07-29
 
 ### Added
@@ -212,7 +226,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit WPA2/WPA3-Personal transition scan classification; callers choose
   PSK or SAE instead of discovery silently downgrading to WPA2.
 
-[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.17...HEAD
+[Unreleased]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.19...HEAD
+[0.1.0-alpha.19]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.18...v0.1.0-alpha.19
+[0.1.0-alpha.18]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.17...v0.1.0-alpha.18
 [0.1.0-alpha.17]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.16...v0.1.0-alpha.17
 [0.1.0-alpha.16]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.15...v0.1.0-alpha.16
 [0.1.0-alpha.15]: https://github.com/hispark-rs/hisi-rf-core/compare/v0.1.0-alpha.14...v0.1.0-alpha.15
