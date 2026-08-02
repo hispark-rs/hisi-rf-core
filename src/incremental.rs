@@ -431,7 +431,12 @@ pub enum PollDisposition {
     Complete(IncrementalCompletion),
     /// Cancellation reached a terminal state.
     Cancelled,
-    /// The poll consumed its granted budget and requires another fair turn.
+    /// The poll reached or overran its granted budget and requires another fair turn.
+    ///
+    /// Event accounting is a hard bound: a backend must never report more
+    /// events than granted. Elapsed time is measured after a backend call
+    /// returns, so an uninterruptible platform operation can be observed
+    /// overrunning the deadline even though it cannot be preempted in place.
     BudgetExhausted(WaitSet),
 }
 
@@ -441,12 +446,20 @@ pub struct WorkReport {
     operation: OperationId,
     consumed_events: u16,
     elapsed_us: u32,
+    time_budget_exhausted: bool,
     made_progress: bool,
     disposition: PollDisposition,
 }
 
 impl WorkReport {
-    /// Construct a report only when both budget dimensions were respected.
+    /// Construct a report with strict event accounting and observable time overruns.
+    ///
+    /// A non-terminal time overrun is valid only when reported as
+    /// [`PollDisposition::BudgetExhausted`]. A terminal completion or
+    /// cancellation remains terminal while carrying the overrun observation.
+    /// This preserves operation ownership after an external side effect while
+    /// making the missed deadline visible. Event overruns remain invalid
+    /// because the backend controls how many events it consumes.
     pub const fn try_new(
         operation: OperationId,
         budget: WorkBudget,
@@ -455,12 +468,23 @@ impl WorkReport {
         made_progress: bool,
         disposition: PollDisposition,
     ) -> Option<Self> {
-        if consumed_events > budget.max_events.get() || elapsed_us > budget.max_time_us.get() {
+        if consumed_events > budget.max_events.get() {
             return None;
         }
+        let time_budget_exhausted = elapsed_us >= budget.max_time_us.get();
         if matches!(disposition, PollDisposition::BudgetExhausted(_))
             && consumed_events != budget.max_events.get()
-            && elapsed_us != budget.max_time_us.get()
+            && !time_budget_exhausted
+        {
+            return None;
+        }
+        if elapsed_us > budget.max_time_us.get()
+            && !matches!(
+                disposition,
+                PollDisposition::BudgetExhausted(_)
+                    | PollDisposition::Complete(_)
+                    | PollDisposition::Cancelled
+            )
         {
             return None;
         }
@@ -473,6 +497,7 @@ impl WorkReport {
             operation,
             consumed_events,
             elapsed_us,
+            time_budget_exhausted,
             made_progress,
             disposition,
         })
@@ -491,6 +516,11 @@ impl WorkReport {
     /// Backend-measured elapsed time in microseconds.
     pub const fn elapsed_us(self) -> u32 {
         self.elapsed_us
+    }
+
+    /// Whether this poll reached or overran its elapsed-time grant.
+    pub const fn time_budget_exhausted(self) -> bool {
+        self.time_budget_exhausted
     }
 
     /// Whether the backend changed protocol-visible state.
@@ -636,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn work_report_and_wait_set_enforce_both_budget_dimensions() {
+    fn work_report_enforces_events_and_observes_time_overruns() {
         let budget = WorkBudget::try_new(3, 200).unwrap();
         let wait = WaitSet::COMMAND
             .union(WaitSet::BACKEND)
@@ -648,6 +678,7 @@ mod tests {
         assert_eq!(report.operation(), id);
         assert_eq!(report.consumed_events(), 3);
         assert_eq!(report.elapsed_us(), 200);
+        assert!(report.time_budget_exhausted());
         assert!(report.made_progress());
         assert!(wait.contains(WaitSet::COMMAND));
         assert!(wait.contains(WaitSet::BACKEND));
@@ -656,7 +687,29 @@ mod tests {
             WorkReport::try_new(id, budget, 4, 1, true, PollDisposition::Pending(wait)).is_none()
         );
         assert!(
-            WorkReport::try_new(id, budget, 1, 201, true, PollDisposition::Pending(wait)).is_none()
+            WorkReport::try_new(
+                id,
+                budget,
+                1,
+                201,
+                true,
+                PollDisposition::BudgetExhausted(wait),
+            )
+            .is_some()
+        );
+        let completed_after_overrun = WorkReport::try_new(
+            id,
+            budget,
+            1,
+            201,
+            true,
+            PollDisposition::Complete(IncrementalCompletion::Initialized),
+        )
+        .unwrap();
+        assert!(completed_after_overrun.time_budget_exhausted());
+        assert!(
+            WorkReport::try_new(id, budget, 1, 201, true, PollDisposition::Pending(wait),)
+                .is_none()
         );
         assert!(
             WorkReport::try_new(

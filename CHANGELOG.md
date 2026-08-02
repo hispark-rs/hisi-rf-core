@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `WorkReport::time_budget_exhausted()` so runners can distinguish an
+  observed elapsed-time overrun from an event-accounting violation.
+
+### Fixed
+
+- Preserve terminal results and live operation ownership when an
+  uninterruptible backend call returns after its elapsed-time grant. Event
+  accounting remains a hard upper bound; non-terminal time overruns are
+  reported as `BudgetExhausted` instead of being misclassified as backend
+  failures.
+
 ## [0.1.0-alpha.19] - 2026-07-29
 
 ### Added

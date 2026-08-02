@@ -531,6 +531,7 @@ pub const fn hisi_rf_core::WorkReport::disposition(self) -> hisi_rf_core::PollDi
 pub const fn hisi_rf_core::WorkReport::elapsed_us(self) -> u32
 pub const fn hisi_rf_core::WorkReport::made_progress(self) -> bool
 pub const fn hisi_rf_core::WorkReport::operation(self) -> hisi_rf_core::OperationId
+pub const fn hisi_rf_core::WorkReport::time_budget_exhausted(self) -> bool
 pub const fn hisi_rf_core::WorkReport::try_new(hisi_rf_core::OperationId, hisi_rf_core::WorkBudget, u16, u32, bool, hisi_rf_core::PollDisposition) -> core::option::Option<Self>
 pub const hisi_rf_core::DIAGNOSTIC_SCHEMA: &str
 pub const hisi_rf_core::DIAGNOSTIC_TRACE_CAPACITY: usize
