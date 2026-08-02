@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.20] - 2026-08-02
+
 ### Added
 
 - Added `WorkReport::time_budget_exhausted()` so runners can distinguish an
