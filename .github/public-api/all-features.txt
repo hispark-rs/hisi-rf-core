@@ -64,7 +64,9 @@ pub hisi_rf_core::DiagnosticTraceKind::DisconnectReason
 pub hisi_rf_core::DiagnosticTraceKind::DriverContext
 pub hisi_rf_core::DiagnosticTraceKind::HostapStatus
 pub hisi_rf_core::DiagnosticTraceKind::IeeeStatus
+pub hisi_rf_core::DiagnosticTraceKind::LargestContiguous
 pub hisi_rf_core::DiagnosticTraceKind::ResourceAvailable
+pub hisi_rf_core::DiagnosticTraceKind::ResourceOwner
 pub hisi_rf_core::DiagnosticTraceKind::ResourceRequired
 pub hisi_rf_core::DiagnosticTraceKind::RuntimeCode
 pub hisi_rf_core::DiagnosticTraceKind::SupplicantContext
