@@ -131,6 +131,10 @@ pub enum DiagnosticTraceKind {
     ResourceRequired,
     /// Amount of a bounded resource available before initialization.
     ResourceAvailable,
+    /// Stable composition-defined owner of a failing resource child.
+    ResourceOwner,
+    /// Largest contiguous payload allocation available at admission failure.
+    LargestContiguous,
 }
 
 impl DiagnosticTraceKind {
@@ -147,6 +151,8 @@ impl DiagnosticTraceKind {
             Self::RuntimeCode => "runtime_code",
             Self::ResourceRequired => "resource_required",
             Self::ResourceAvailable => "resource_available",
+            Self::ResourceOwner => "resource_owner",
+            Self::LargestContiguous => "largest_contiguous",
         }
     }
 }
