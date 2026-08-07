@@ -45,18 +45,22 @@ impl SleAddress {
     }
 }
 
-/// Non-zero SLE announce interval in controller units.
+/// SLE announce interval in 125 us controller units.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct AnnounceInterval(u16);
+pub struct AnnounceInterval(u32);
 
 impl AnnounceInterval {
-    /// Reject the reserved zero interval.
-    pub const fn try_from_units(units: u16) -> Option<Self> {
-        if units == 0 { None } else { Some(Self(units)) }
+    /// Validate the WS63 public SLE API range without truncating its 24-bit value.
+    pub const fn try_from_units(units: u32) -> Option<Self> {
+        if units < 0x20 || units > 0x00ff_ffff {
+            None
+        } else {
+            Some(Self(units))
+        }
     }
 
     /// Return controller units.
-    pub const fn as_units(self) -> u16 {
+    pub const fn as_units(self) -> u32 {
         self.0
     }
 }
@@ -185,14 +189,18 @@ impl AnnounceConfig {
     }
 }
 
-/// Non-zero seek interval or window in controller units.
+/// SLE seek interval or window in 125 us controller units.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct SeekInterval(u16);
 
 impl SeekInterval {
-    /// Reject the reserved zero interval.
+    /// Validate the public SLE seek timing range.
     pub const fn try_from_units(units: u16) -> Option<Self> {
-        if units == 0 { None } else { Some(Self(units)) }
+        if units < 0x14 {
+            None
+        } else {
+            Some(Self(units))
+        }
     }
 
     /// Return controller units.
@@ -263,9 +271,10 @@ mod tests {
     #[test]
     fn validates_addresses_timing_and_channels() {
         assert!(SleAddress::try_new([0; 6], AddressType::Public).is_none());
-        assert!(AnnounceInterval::try_from_units(0).is_none());
-        let short = AnnounceInterval::try_from_units(10).unwrap();
-        let long = AnnounceInterval::try_from_units(20).unwrap();
+        assert!(AnnounceInterval::try_from_units(0x1f).is_none());
+        assert!(AnnounceInterval::try_from_units(0x0100_0000).is_none());
+        let short = AnnounceInterval::try_from_units(0x20).unwrap();
+        let long = AnnounceInterval::try_from_units(0x40).unwrap();
         assert!(AnnounceTiming::try_new(long, short).is_none());
         assert!(AnnounceChannels::try_from_bits(0).is_none());
         assert!(AnnounceChannels::try_from_bits(0x08).is_none());
@@ -275,6 +284,7 @@ mod tests {
     fn bounds_announce_payloads() {
         assert!(AnnouncePayload::try_from_slice(&[0; 64]).is_some());
         assert!(AnnouncePayload::try_from_slice(&[0; 65]).is_none());
+        assert!(SeekInterval::try_from_units(0x13).is_none());
         let interval = SeekInterval::try_from_units(100).unwrap();
         let window = SeekInterval::try_from_units(101).unwrap();
         assert!(SeekTiming::try_new(interval, window).is_none());
