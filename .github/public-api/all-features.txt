@@ -3,6 +3,9 @@ pub mod hisi_rf_core::ble
 pub enum hisi_rf_core::ble::AddressType
 pub hisi_rf_core::ble::AddressType::Public
 pub hisi_rf_core::ble::AddressType::RandomStatic
+pub enum hisi_rf_core::ble::GattUuid
+pub hisi_rf_core::ble::GattUuid::Uuid128([u8; 16])
+pub hisi_rf_core::ble::GattUuid::Uuid16(u16)
 pub enum hisi_rf_core::ble::ScanMode
 pub hisi_rf_core::ble::ScanMode::Active
 pub hisi_rf_core::ble::ScanMode::Passive
@@ -36,6 +39,48 @@ pub const fn hisi_rf_core::ble::BluetoothAddress::address_type(self) -> hisi_rf_
 pub const fn hisi_rf_core::ble::BluetoothAddress::bytes(self) -> [u8; 6]
 pub const fn hisi_rf_core::ble::BluetoothAddress::public([u8; 6]) -> core::option::Option<Self>
 pub const fn hisi_rf_core::ble::BluetoothAddress::random_static([u8; 6]) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::GattCharacteristicDefinition
+impl hisi_rf_core::ble::GattCharacteristicDefinition
+pub const fn hisi_rf_core::ble::GattCharacteristicDefinition::descriptors(self) -> &'static [hisi_rf_core::ble::GattDescriptorDefinition]
+pub const fn hisi_rf_core::ble::GattCharacteristicDefinition::initial_value(self) -> &'static [u8]
+pub const fn hisi_rf_core::ble::GattCharacteristicDefinition::maximum_len(self) -> u16
+pub const fn hisi_rf_core::ble::GattCharacteristicDefinition::permissions(self) -> hisi_rf_core::ble::GattPermissions
+pub const fn hisi_rf_core::ble::GattCharacteristicDefinition::properties(self) -> hisi_rf_core::ble::GattProperties
+pub const fn hisi_rf_core::ble::GattCharacteristicDefinition::try_new(hisi_rf_core::ble::GattUuid, hisi_rf_core::ble::GattPermissions, hisi_rf_core::ble::GattProperties, &'static [u8], u16, &'static [hisi_rf_core::ble::GattDescriptorDefinition]) -> core::option::Option<Self>
+pub const fn hisi_rf_core::ble::GattCharacteristicDefinition::uuid(self) -> hisi_rf_core::ble::GattUuid
+pub struct hisi_rf_core::ble::GattDescriptorDefinition
+impl hisi_rf_core::ble::GattDescriptorDefinition
+pub const fn hisi_rf_core::ble::GattDescriptorDefinition::initial_value(self) -> &'static [u8]
+pub const fn hisi_rf_core::ble::GattDescriptorDefinition::maximum_len(self) -> u16
+pub const fn hisi_rf_core::ble::GattDescriptorDefinition::permissions(self) -> hisi_rf_core::ble::GattPermissions
+pub const fn hisi_rf_core::ble::GattDescriptorDefinition::try_new(hisi_rf_core::ble::GattUuid, hisi_rf_core::ble::GattPermissions, &'static [u8], u16) -> core::option::Option<Self>
+pub const fn hisi_rf_core::ble::GattDescriptorDefinition::uuid(self) -> hisi_rf_core::ble::GattUuid
+pub struct hisi_rf_core::ble::GattPermissions(_)
+impl hisi_rf_core::ble::GattPermissions
+pub const hisi_rf_core::ble::GattPermissions::READ: Self
+pub const hisi_rf_core::ble::GattPermissions::WRITE: Self
+pub const fn hisi_rf_core::ble::GattPermissions::contains(self, Self) -> bool
+pub const fn hisi_rf_core::ble::GattPermissions::union(self, Self) -> Self
+pub struct hisi_rf_core::ble::GattProperties(_)
+impl hisi_rf_core::ble::GattProperties
+pub const hisi_rf_core::ble::GattProperties::INDICATE: Self
+pub const hisi_rf_core::ble::GattProperties::NOTIFY: Self
+pub const hisi_rf_core::ble::GattProperties::READ: Self
+pub const hisi_rf_core::ble::GattProperties::WRITE: Self
+pub const hisi_rf_core::ble::GattProperties::WRITE_WITHOUT_RESPONSE: Self
+pub const fn hisi_rf_core::ble::GattProperties::contains(self, Self) -> bool
+pub const fn hisi_rf_core::ble::GattProperties::union(self, Self) -> Self
+pub struct hisi_rf_core::ble::GattServerDefinition
+impl hisi_rf_core::ble::GattServerDefinition
+pub const fn hisi_rf_core::ble::GattServerDefinition::app_uuid(self) -> hisi_rf_core::ble::GattUuid
+pub const fn hisi_rf_core::ble::GattServerDefinition::services(self) -> &'static [hisi_rf_core::ble::GattServiceDefinition]
+pub const fn hisi_rf_core::ble::GattServerDefinition::try_new(hisi_rf_core::ble::GattUuid, &'static [hisi_rf_core::ble::GattServiceDefinition]) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::GattServiceDefinition
+impl hisi_rf_core::ble::GattServiceDefinition
+pub const fn hisi_rf_core::ble::GattServiceDefinition::characteristics(self) -> &'static [hisi_rf_core::ble::GattCharacteristicDefinition]
+pub const fn hisi_rf_core::ble::GattServiceDefinition::is_primary(self) -> bool
+pub const fn hisi_rf_core::ble::GattServiceDefinition::try_new(hisi_rf_core::ble::GattUuid, bool, &'static [hisi_rf_core::ble::GattCharacteristicDefinition]) -> core::option::Option<Self>
+pub const fn hisi_rf_core::ble::GattServiceDefinition::uuid(self) -> hisi_rf_core::ble::GattUuid
 pub struct hisi_rf_core::ble::ScanConfig
 impl hisi_rf_core::ble::ScanConfig
 pub const fn hisi_rf_core::ble::ScanConfig::filter_duplicates(self) -> bool
@@ -55,6 +100,9 @@ pub mod hisi_rf_core::sle
 pub enum hisi_rf_core::sle::AddressType
 pub hisi_rf_core::sle::AddressType::Public
 pub hisi_rf_core::sle::AddressType::Random
+pub enum hisi_rf_core::sle::SsapUuid
+pub hisi_rf_core::sle::SsapUuid::Uuid128([u8; 16])
+pub hisi_rf_core::sle::SsapUuid::Uuid16(u16)
 pub struct hisi_rf_core::sle::AnnounceChannels(_)
 impl hisi_rf_core::sle::AnnounceChannels
 pub const hisi_rf_core::sle::AnnounceChannels::ALL: Self
@@ -99,6 +147,46 @@ impl hisi_rf_core::sle::SleAddress
 pub const fn hisi_rf_core::sle::SleAddress::address_type(self) -> hisi_rf_core::sle::AddressType
 pub const fn hisi_rf_core::sle::SleAddress::bytes(self) -> [u8; 6]
 pub const fn hisi_rf_core::sle::SleAddress::try_new([u8; 6], hisi_rf_core::sle::AddressType) -> core::option::Option<Self>
+pub struct hisi_rf_core::sle::SsapDescriptorDefinition
+impl hisi_rf_core::sle::SsapDescriptorDefinition
+pub const fn hisi_rf_core::sle::SsapDescriptorDefinition::initial_value(self) -> &'static [u8]
+pub const fn hisi_rf_core::sle::SsapDescriptorDefinition::maximum_len(self) -> u16
+pub const fn hisi_rf_core::sle::SsapDescriptorDefinition::permissions(self) -> hisi_rf_core::sle::SsapPermissions
+pub const fn hisi_rf_core::sle::SsapDescriptorDefinition::try_new(hisi_rf_core::sle::SsapUuid, hisi_rf_core::sle::SsapPermissions, &'static [u8], u16) -> core::option::Option<Self>
+pub const fn hisi_rf_core::sle::SsapDescriptorDefinition::uuid(self) -> hisi_rf_core::sle::SsapUuid
+pub struct hisi_rf_core::sle::SsapOperations(_)
+impl hisi_rf_core::sle::SsapOperations
+pub const hisi_rf_core::sle::SsapOperations::INDICATE: Self
+pub const hisi_rf_core::sle::SsapOperations::NOTIFY: Self
+pub const hisi_rf_core::sle::SsapOperations::READ: Self
+pub const hisi_rf_core::sle::SsapOperations::WRITE: Self
+pub const fn hisi_rf_core::sle::SsapOperations::contains(self, Self) -> bool
+pub const fn hisi_rf_core::sle::SsapOperations::union(self, Self) -> Self
+pub struct hisi_rf_core::sle::SsapPermissions(_)
+impl hisi_rf_core::sle::SsapPermissions
+pub const hisi_rf_core::sle::SsapPermissions::READ: Self
+pub const hisi_rf_core::sle::SsapPermissions::WRITE: Self
+pub const fn hisi_rf_core::sle::SsapPermissions::contains(self, Self) -> bool
+pub const fn hisi_rf_core::sle::SsapPermissions::union(self, Self) -> Self
+pub struct hisi_rf_core::sle::SsapPropertyDefinition
+impl hisi_rf_core::sle::SsapPropertyDefinition
+pub const fn hisi_rf_core::sle::SsapPropertyDefinition::descriptors(self) -> &'static [hisi_rf_core::sle::SsapDescriptorDefinition]
+pub const fn hisi_rf_core::sle::SsapPropertyDefinition::initial_value(self) -> &'static [u8]
+pub const fn hisi_rf_core::sle::SsapPropertyDefinition::maximum_len(self) -> u16
+pub const fn hisi_rf_core::sle::SsapPropertyDefinition::operations(self) -> hisi_rf_core::sle::SsapOperations
+pub const fn hisi_rf_core::sle::SsapPropertyDefinition::permissions(self) -> hisi_rf_core::sle::SsapPermissions
+pub const fn hisi_rf_core::sle::SsapPropertyDefinition::try_new(hisi_rf_core::sle::SsapUuid, hisi_rf_core::sle::SsapPermissions, hisi_rf_core::sle::SsapOperations, &'static [u8], u16, &'static [hisi_rf_core::sle::SsapDescriptorDefinition]) -> core::option::Option<Self>
+pub const fn hisi_rf_core::sle::SsapPropertyDefinition::uuid(self) -> hisi_rf_core::sle::SsapUuid
+pub struct hisi_rf_core::sle::SsapServerDefinition
+impl hisi_rf_core::sle::SsapServerDefinition
+pub const fn hisi_rf_core::sle::SsapServerDefinition::app_uuid(self) -> hisi_rf_core::sle::SsapUuid
+pub const fn hisi_rf_core::sle::SsapServerDefinition::services(self) -> &'static [hisi_rf_core::sle::SsapServiceDefinition]
+pub const fn hisi_rf_core::sle::SsapServerDefinition::try_new(hisi_rf_core::sle::SsapUuid, &'static [hisi_rf_core::sle::SsapServiceDefinition]) -> core::option::Option<Self>
+pub struct hisi_rf_core::sle::SsapServiceDefinition
+impl hisi_rf_core::sle::SsapServiceDefinition
+pub const fn hisi_rf_core::sle::SsapServiceDefinition::properties(self) -> &'static [hisi_rf_core::sle::SsapPropertyDefinition]
+pub const fn hisi_rf_core::sle::SsapServiceDefinition::try_new(hisi_rf_core::sle::SsapUuid, &'static [hisi_rf_core::sle::SsapPropertyDefinition]) -> core::option::Option<Self>
+pub const fn hisi_rf_core::sle::SsapServiceDefinition::uuid(self) -> hisi_rf_core::sle::SsapUuid
 pub enum hisi_rf_core::BackendErrorClass
 pub hisi_rf_core::BackendErrorClass::BackendTimeout
 pub hisi_rf_core::BackendErrorClass::Busy

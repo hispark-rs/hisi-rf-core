@@ -264,6 +264,259 @@ impl SeekConfig {
     }
 }
 
+/// SLE/SSAP UUID without WS63 wire-layout details.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SsapUuid {
+    /// Short 16-bit UUID.
+    Uuid16(u16),
+    /// Full 128-bit UUID in network byte order.
+    Uuid128([u8; 16]),
+}
+
+/// Valid SSAP property permissions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SsapPermissions(u8);
+
+impl SsapPermissions {
+    /// Peer may read the value.
+    pub const READ: Self = Self(1 << 0);
+    /// Peer may write the value.
+    pub const WRITE: Self = Self(1 << 1);
+
+    /// Combine independently named permissions.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Test whether all requested permissions are present.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Return the reviewed portable permission bitmap for a chip adapter.
+    #[doc(hidden)]
+    pub const fn __bits(self) -> u8 {
+        self.0
+    }
+}
+
+/// Valid SSAP property operations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SsapOperations(u8);
+
+impl SsapOperations {
+    /// Property supports reads.
+    pub const READ: Self = Self(1 << 0);
+    /// Property supports writes.
+    pub const WRITE: Self = Self(1 << 1);
+    /// Property supports notifications.
+    pub const NOTIFY: Self = Self(1 << 2);
+    /// Property supports indications.
+    pub const INDICATE: Self = Self(1 << 3);
+
+    /// Combine independently named operations.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Test whether all requested operations are present.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Return the reviewed portable operation bitmap for a chip adapter.
+    #[doc(hidden)]
+    pub const fn __bits(self) -> u8 {
+        self.0
+    }
+}
+
+/// Static SSAP descriptor definition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SsapDescriptorDefinition {
+    uuid: SsapUuid,
+    permissions: SsapPermissions,
+    initial_value: &'static [u8],
+    maximum_len: u16,
+}
+
+impl SsapDescriptorDefinition {
+    /// Validate a descriptor's initial and maximum value lengths.
+    pub const fn try_new(
+        uuid: SsapUuid,
+        permissions: SsapPermissions,
+        initial_value: &'static [u8],
+        maximum_len: u16,
+    ) -> Option<Self> {
+        if maximum_len == 0 || initial_value.len() > maximum_len as usize {
+            None
+        } else {
+            Some(Self {
+                uuid,
+                permissions,
+                initial_value,
+                maximum_len,
+            })
+        }
+    }
+
+    /// Descriptor UUID.
+    pub const fn uuid(self) -> SsapUuid {
+        self.uuid
+    }
+
+    /// Peer permissions.
+    pub const fn permissions(self) -> SsapPermissions {
+        self.permissions
+    }
+
+    /// Initial bytes copied into backend-owned storage.
+    pub const fn initial_value(self) -> &'static [u8] {
+        self.initial_value
+    }
+
+    /// Maximum accepted length.
+    pub const fn maximum_len(self) -> u16 {
+        self.maximum_len
+    }
+}
+
+/// Static SSAP property definition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SsapPropertyDefinition {
+    uuid: SsapUuid,
+    permissions: SsapPermissions,
+    operations: SsapOperations,
+    initial_value: &'static [u8],
+    maximum_len: u16,
+    descriptors: &'static [SsapDescriptorDefinition],
+}
+
+impl SsapPropertyDefinition {
+    /// Validate value capacity and permission/operation consistency.
+    pub const fn try_new(
+        uuid: SsapUuid,
+        permissions: SsapPermissions,
+        operations: SsapOperations,
+        initial_value: &'static [u8],
+        maximum_len: u16,
+        descriptors: &'static [SsapDescriptorDefinition],
+    ) -> Option<Self> {
+        if maximum_len == 0 || initial_value.len() > maximum_len as usize {
+            return None;
+        }
+        if operations.contains(SsapOperations::READ) && !permissions.contains(SsapPermissions::READ)
+        {
+            return None;
+        }
+        if operations.contains(SsapOperations::WRITE)
+            && !permissions.contains(SsapPermissions::WRITE)
+        {
+            return None;
+        }
+        Some(Self {
+            uuid,
+            permissions,
+            operations,
+            initial_value,
+            maximum_len,
+            descriptors,
+        })
+    }
+
+    /// Property UUID.
+    pub const fn uuid(self) -> SsapUuid {
+        self.uuid
+    }
+
+    /// Peer permissions.
+    pub const fn permissions(self) -> SsapPermissions {
+        self.permissions
+    }
+
+    /// Supported SSAP operations.
+    pub const fn operations(self) -> SsapOperations {
+        self.operations
+    }
+
+    /// Initial value copied into backend-owned storage.
+    pub const fn initial_value(self) -> &'static [u8] {
+        self.initial_value
+    }
+
+    /// Maximum accepted value length.
+    pub const fn maximum_len(self) -> u16 {
+        self.maximum_len
+    }
+
+    /// Static descriptor definitions.
+    pub const fn descriptors(self) -> &'static [SsapDescriptorDefinition] {
+        self.descriptors
+    }
+}
+
+/// Static SSAP service definition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SsapServiceDefinition {
+    uuid: SsapUuid,
+    properties: &'static [SsapPropertyDefinition],
+}
+
+impl SsapServiceDefinition {
+    /// Require at least one property in a service.
+    pub const fn try_new(
+        uuid: SsapUuid,
+        properties: &'static [SsapPropertyDefinition],
+    ) -> Option<Self> {
+        if properties.is_empty() {
+            None
+        } else {
+            Some(Self { uuid, properties })
+        }
+    }
+
+    /// Service UUID.
+    pub const fn uuid(self) -> SsapUuid {
+        self.uuid
+    }
+
+    /// Static property definitions.
+    pub const fn properties(self) -> &'static [SsapPropertyDefinition] {
+        self.properties
+    }
+}
+
+/// Complete caller-owned static SSAP server database.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SsapServerDefinition {
+    app_uuid: SsapUuid,
+    services: &'static [SsapServiceDefinition],
+}
+
+impl SsapServerDefinition {
+    /// Require at least one service in the static database.
+    pub const fn try_new(
+        app_uuid: SsapUuid,
+        services: &'static [SsapServiceDefinition],
+    ) -> Option<Self> {
+        if services.is_empty() {
+            None
+        } else {
+            Some(Self { app_uuid, services })
+        }
+    }
+
+    /// Application UUID used to register the server.
+    pub const fn app_uuid(self) -> SsapUuid {
+        self.app_uuid
+    }
+
+    /// Static service definitions.
+    pub const fn services(self) -> &'static [SsapServiceDefinition] {
+        self.services
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -288,5 +541,45 @@ mod tests {
         let interval = SeekInterval::try_from_units(100).unwrap();
         let window = SeekInterval::try_from_units(101).unwrap();
         assert!(SeekTiming::try_new(interval, window).is_none());
+    }
+
+    #[test]
+    fn validates_static_ssap_database_relations() {
+        const DESCRIPTOR: SsapDescriptorDefinition = SsapDescriptorDefinition::try_new(
+            SsapUuid::Uuid16(0x600d),
+            SsapPermissions::READ,
+            b"U3",
+            8,
+        )
+        .unwrap();
+        const PROPERTY: SsapPropertyDefinition = SsapPropertyDefinition::try_new(
+            SsapUuid::Uuid16(0x600c),
+            SsapPermissions::READ.union(SsapPermissions::WRITE),
+            SsapOperations::READ
+                .union(SsapOperations::WRITE)
+                .union(SsapOperations::NOTIFY),
+            b"U3",
+            16,
+            &[DESCRIPTOR],
+        )
+        .unwrap();
+        const SERVICE: SsapServiceDefinition =
+            SsapServiceDefinition::try_new(SsapUuid::Uuid16(0x600b), &[PROPERTY]).unwrap();
+        const DATABASE: SsapServerDefinition =
+            SsapServerDefinition::try_new(SsapUuid::Uuid16(0x600a), &[SERVICE]).unwrap();
+
+        assert_eq!(DATABASE.services()[0], SERVICE);
+        assert!(
+            SsapPropertyDefinition::try_new(
+                SsapUuid::Uuid16(1),
+                SsapPermissions::READ,
+                SsapOperations::WRITE,
+                &[],
+                1,
+                &[],
+            )
+            .is_none()
+        );
+        assert!(SsapServiceDefinition::try_new(SsapUuid::Uuid16(1), &[]).is_none());
     }
 }

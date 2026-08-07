@@ -305,6 +305,279 @@ impl ScanConfig {
     }
 }
 
+/// Bluetooth GATT UUID without controller-specific byte layout.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GattUuid {
+    /// Bluetooth 16-bit UUID.
+    Uuid16(u16),
+    /// Full 128-bit UUID in network byte order.
+    Uuid128([u8; 16]),
+}
+
+/// Valid GATT attribute permissions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GattPermissions(u8);
+
+impl GattPermissions {
+    /// Attribute can be read by the peer.
+    pub const READ: Self = Self(1 << 0);
+    /// Attribute can be written by the peer.
+    pub const WRITE: Self = Self(1 << 1);
+
+    /// Combine independently named permissions.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Test whether all requested permissions are present.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Return the reviewed portable permission bitmap for a chip adapter.
+    #[doc(hidden)]
+    pub const fn __bits(self) -> u8 {
+        self.0
+    }
+}
+
+/// Valid GATT characteristic operations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GattProperties(u8);
+
+impl GattProperties {
+    /// Peer may read the characteristic value.
+    pub const READ: Self = Self(1 << 0);
+    /// Peer may write and receive a response.
+    pub const WRITE: Self = Self(1 << 1);
+    /// Peer may write without a response.
+    pub const WRITE_WITHOUT_RESPONSE: Self = Self(1 << 2);
+    /// Server may send notifications.
+    pub const NOTIFY: Self = Self(1 << 3);
+    /// Server may send acknowledged indications.
+    pub const INDICATE: Self = Self(1 << 4);
+
+    /// Combine independently named properties.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Test whether all requested properties are present.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Return the reviewed portable property bitmap for a chip adapter.
+    #[doc(hidden)]
+    pub const fn __bits(self) -> u8 {
+        self.0
+    }
+}
+
+/// Static GATT descriptor definition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GattDescriptorDefinition {
+    uuid: GattUuid,
+    permissions: GattPermissions,
+    initial_value: &'static [u8],
+    maximum_len: u16,
+}
+
+impl GattDescriptorDefinition {
+    /// Validate a descriptor's initial and maximum value lengths.
+    pub const fn try_new(
+        uuid: GattUuid,
+        permissions: GattPermissions,
+        initial_value: &'static [u8],
+        maximum_len: u16,
+    ) -> Option<Self> {
+        if maximum_len == 0 || initial_value.len() > maximum_len as usize {
+            None
+        } else {
+            Some(Self {
+                uuid,
+                permissions,
+                initial_value,
+                maximum_len,
+            })
+        }
+    }
+
+    /// Descriptor UUID.
+    pub const fn uuid(self) -> GattUuid {
+        self.uuid
+    }
+
+    /// Peer permissions.
+    pub const fn permissions(self) -> GattPermissions {
+        self.permissions
+    }
+
+    /// Initial descriptor bytes copied into backend-owned storage.
+    pub const fn initial_value(self) -> &'static [u8] {
+        self.initial_value
+    }
+
+    /// Maximum accepted value length.
+    pub const fn maximum_len(self) -> u16 {
+        self.maximum_len
+    }
+}
+
+/// Static GATT characteristic definition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GattCharacteristicDefinition {
+    uuid: GattUuid,
+    permissions: GattPermissions,
+    properties: GattProperties,
+    initial_value: &'static [u8],
+    maximum_len: u16,
+    descriptors: &'static [GattDescriptorDefinition],
+}
+
+impl GattCharacteristicDefinition {
+    /// Validate value capacity and the notification/indication CCC contract.
+    pub const fn try_new(
+        uuid: GattUuid,
+        permissions: GattPermissions,
+        properties: GattProperties,
+        initial_value: &'static [u8],
+        maximum_len: u16,
+        descriptors: &'static [GattDescriptorDefinition],
+    ) -> Option<Self> {
+        if maximum_len == 0 || initial_value.len() > maximum_len as usize {
+            return None;
+        }
+        let publishes = properties.contains(GattProperties::NOTIFY)
+            || properties.contains(GattProperties::INDICATE);
+        if publishes && !has_ccc_descriptor(descriptors) {
+            return None;
+        }
+        Some(Self {
+            uuid,
+            permissions,
+            properties,
+            initial_value,
+            maximum_len,
+            descriptors,
+        })
+    }
+
+    /// Characteristic UUID.
+    pub const fn uuid(self) -> GattUuid {
+        self.uuid
+    }
+
+    /// Peer permissions.
+    pub const fn permissions(self) -> GattPermissions {
+        self.permissions
+    }
+
+    /// Supported GATT operations.
+    pub const fn properties(self) -> GattProperties {
+        self.properties
+    }
+
+    /// Initial value copied into backend-owned storage.
+    pub const fn initial_value(self) -> &'static [u8] {
+        self.initial_value
+    }
+
+    /// Maximum accepted value length.
+    pub const fn maximum_len(self) -> u16 {
+        self.maximum_len
+    }
+
+    /// Static descriptor definitions.
+    pub const fn descriptors(self) -> &'static [GattDescriptorDefinition] {
+        self.descriptors
+    }
+}
+
+const fn has_ccc_descriptor(descriptors: &[GattDescriptorDefinition]) -> bool {
+    let mut index = 0;
+    while index < descriptors.len() {
+        if matches!(descriptors[index].uuid, GattUuid::Uuid16(0x2902)) {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+/// Static GATT service definition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GattServiceDefinition {
+    uuid: GattUuid,
+    primary: bool,
+    characteristics: &'static [GattCharacteristicDefinition],
+}
+
+impl GattServiceDefinition {
+    /// Require at least one characteristic in a service.
+    pub const fn try_new(
+        uuid: GattUuid,
+        primary: bool,
+        characteristics: &'static [GattCharacteristicDefinition],
+    ) -> Option<Self> {
+        if characteristics.is_empty() {
+            None
+        } else {
+            Some(Self {
+                uuid,
+                primary,
+                characteristics,
+            })
+        }
+    }
+
+    /// Service UUID.
+    pub const fn uuid(self) -> GattUuid {
+        self.uuid
+    }
+
+    /// Whether this is a primary service.
+    pub const fn is_primary(self) -> bool {
+        self.primary
+    }
+
+    /// Static characteristic definitions.
+    pub const fn characteristics(self) -> &'static [GattCharacteristicDefinition] {
+        self.characteristics
+    }
+}
+
+/// Complete caller-owned static GATT server database.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GattServerDefinition {
+    app_uuid: GattUuid,
+    services: &'static [GattServiceDefinition],
+}
+
+impl GattServerDefinition {
+    /// Require at least one service in the static database.
+    pub const fn try_new(
+        app_uuid: GattUuid,
+        services: &'static [GattServiceDefinition],
+    ) -> Option<Self> {
+        if services.is_empty() {
+            None
+        } else {
+            Some(Self { app_uuid, services })
+        }
+    }
+
+    /// Application UUID used to register the server.
+    pub const fn app_uuid(self) -> GattUuid {
+        self.app_uuid
+    }
+
+    /// Static service definitions.
+    pub const fn services(self) -> &'static [GattServiceDefinition] {
+        self.services
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,5 +600,46 @@ mod tests {
         assert!(AdvertisingPayload::try_from_slice(&[0; 32]).is_none());
         assert!(AdvertisingChannels::try_from_bits(0).is_none());
         assert!(AdvertisingChannels::try_from_bits(0x08).is_none());
+    }
+
+    #[test]
+    fn validates_static_gatt_database_relations() {
+        const CCC: GattDescriptorDefinition = GattDescriptorDefinition::try_new(
+            GattUuid::Uuid16(0x2902),
+            GattPermissions::READ.union(GattPermissions::WRITE),
+            &[0, 0],
+            2,
+        )
+        .unwrap();
+        const CHARACTERISTIC: GattCharacteristicDefinition = GattCharacteristicDefinition::try_new(
+            GattUuid::Uuid16(0xabcd),
+            GattPermissions::READ.union(GattPermissions::WRITE),
+            GattProperties::READ
+                .union(GattProperties::WRITE)
+                .union(GattProperties::NOTIFY),
+            b"U3",
+            16,
+            &[CCC],
+        )
+        .unwrap();
+        const SERVICE: GattServiceDefinition =
+            GattServiceDefinition::try_new(GattUuid::Uuid16(0xcdef), true, &[CHARACTERISTIC])
+                .unwrap();
+        const DATABASE: GattServerDefinition =
+            GattServerDefinition::try_new(GattUuid::Uuid16(0xb301), &[SERVICE]).unwrap();
+
+        assert_eq!(DATABASE.services()[0], SERVICE);
+        assert!(
+            GattCharacteristicDefinition::try_new(
+                GattUuid::Uuid16(1),
+                GattPermissions::READ,
+                GattProperties::NOTIFY,
+                &[],
+                1,
+                &[],
+            )
+            .is_none()
+        );
+        assert!(GattServiceDefinition::try_new(GattUuid::Uuid16(1), true, &[]).is_none());
     }
 }
