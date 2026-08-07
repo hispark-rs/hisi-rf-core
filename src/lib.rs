@@ -11,7 +11,12 @@
 
 #![no_std]
 
+#[cfg(test)]
+extern crate std;
+
 pub mod ble;
+#[doc(hidden)]
+pub mod control;
 mod diagnostics;
 #[cfg(feature = "incremental-backend-experiment")]
 mod incremental;
