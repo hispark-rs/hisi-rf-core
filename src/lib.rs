@@ -11,9 +11,11 @@
 
 #![no_std]
 
+pub mod ble;
 mod diagnostics;
 #[cfg(feature = "incremental-backend-experiment")]
 mod incremental;
+pub mod sle;
 mod state;
 mod wifi;
 

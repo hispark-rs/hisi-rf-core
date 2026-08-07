@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add chip-neutral, allocation-free BLE GAP and SLE announce/seek configuration
+  types with validated addresses, timing relationships, channel maps, and
+  bounded payload ownership. These contracts are the first U2 layer and do not
+  yet claim async command completion or vendor-backend integration.
+
 ## [0.1.0-alpha.21] - 2026-08-03
 
 ### Added
