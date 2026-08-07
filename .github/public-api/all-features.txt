@@ -1,4 +1,104 @@
 pub mod hisi_rf_core
+pub mod hisi_rf_core::ble
+pub enum hisi_rf_core::ble::AddressType
+pub hisi_rf_core::ble::AddressType::Public
+pub hisi_rf_core::ble::AddressType::RandomStatic
+pub enum hisi_rf_core::ble::ScanMode
+pub hisi_rf_core::ble::ScanMode::Active
+pub hisi_rf_core::ble::ScanMode::Passive
+pub struct hisi_rf_core::ble::AdvertisingChannels(_)
+impl hisi_rf_core::ble::AdvertisingChannels
+pub const hisi_rf_core::ble::AdvertisingChannels::ALL: Self
+pub const fn hisi_rf_core::ble::AdvertisingChannels::bits(self) -> u8
+pub const fn hisi_rf_core::ble::AdvertisingChannels::try_from_bits(u8) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::AdvertisingConfig
+impl hisi_rf_core::ble::AdvertisingConfig
+pub const fn hisi_rf_core::ble::AdvertisingConfig::channels(self) -> hisi_rf_core::ble::AdvertisingChannels
+pub const fn hisi_rf_core::ble::AdvertisingConfig::new(hisi_rf_core::ble::AdvertisingTiming, hisi_rf_core::ble::AdvertisingChannels, hisi_rf_core::ble::AdvertisingPayload) -> Self
+pub const fn hisi_rf_core::ble::AdvertisingConfig::payload(&self) -> &hisi_rf_core::ble::AdvertisingPayload
+pub const fn hisi_rf_core::ble::AdvertisingConfig::timing(self) -> hisi_rf_core::ble::AdvertisingTiming
+pub struct hisi_rf_core::ble::AdvertisingInterval(_)
+impl hisi_rf_core::ble::AdvertisingInterval
+pub const fn hisi_rf_core::ble::AdvertisingInterval::as_units(self) -> u16
+pub const fn hisi_rf_core::ble::AdvertisingInterval::try_from_units(u16) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::AdvertisingPayload
+impl hisi_rf_core::ble::AdvertisingPayload
+pub fn hisi_rf_core::ble::AdvertisingPayload::as_bytes(&self) -> &[u8]
+pub fn hisi_rf_core::ble::AdvertisingPayload::try_from_slice(&[u8]) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::AdvertisingTiming
+impl hisi_rf_core::ble::AdvertisingTiming
+pub const fn hisi_rf_core::ble::AdvertisingTiming::maximum(self) -> hisi_rf_core::ble::AdvertisingInterval
+pub const fn hisi_rf_core::ble::AdvertisingTiming::minimum(self) -> hisi_rf_core::ble::AdvertisingInterval
+pub const fn hisi_rf_core::ble::AdvertisingTiming::try_new(hisi_rf_core::ble::AdvertisingInterval, hisi_rf_core::ble::AdvertisingInterval) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::BluetoothAddress
+impl hisi_rf_core::ble::BluetoothAddress
+pub const fn hisi_rf_core::ble::BluetoothAddress::address_type(self) -> hisi_rf_core::ble::AddressType
+pub const fn hisi_rf_core::ble::BluetoothAddress::bytes(self) -> [u8; 6]
+pub const fn hisi_rf_core::ble::BluetoothAddress::public([u8; 6]) -> core::option::Option<Self>
+pub const fn hisi_rf_core::ble::BluetoothAddress::random_static([u8; 6]) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::ScanConfig
+impl hisi_rf_core::ble::ScanConfig
+pub const fn hisi_rf_core::ble::ScanConfig::filter_duplicates(self) -> bool
+pub const fn hisi_rf_core::ble::ScanConfig::mode(self) -> hisi_rf_core::ble::ScanMode
+pub const fn hisi_rf_core::ble::ScanConfig::new(hisi_rf_core::ble::ScanTiming, hisi_rf_core::ble::ScanMode, bool) -> Self
+pub const fn hisi_rf_core::ble::ScanConfig::timing(self) -> hisi_rf_core::ble::ScanTiming
+pub struct hisi_rf_core::ble::ScanInterval(_)
+impl hisi_rf_core::ble::ScanInterval
+pub const fn hisi_rf_core::ble::ScanInterval::as_units(self) -> u16
+pub const fn hisi_rf_core::ble::ScanInterval::try_from_units(u16) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::ScanTiming
+impl hisi_rf_core::ble::ScanTiming
+pub const fn hisi_rf_core::ble::ScanTiming::interval(self) -> hisi_rf_core::ble::ScanInterval
+pub const fn hisi_rf_core::ble::ScanTiming::try_new(hisi_rf_core::ble::ScanInterval, hisi_rf_core::ble::ScanInterval) -> core::option::Option<Self>
+pub const fn hisi_rf_core::ble::ScanTiming::window(self) -> hisi_rf_core::ble::ScanInterval
+pub mod hisi_rf_core::sle
+pub enum hisi_rf_core::sle::AddressType
+pub hisi_rf_core::sle::AddressType::Public
+pub hisi_rf_core::sle::AddressType::Random
+pub struct hisi_rf_core::sle::AnnounceChannels(_)
+impl hisi_rf_core::sle::AnnounceChannels
+pub const hisi_rf_core::sle::AnnounceChannels::ALL: Self
+pub const fn hisi_rf_core::sle::AnnounceChannels::bits(self) -> u8
+pub const fn hisi_rf_core::sle::AnnounceChannels::try_from_bits(u8) -> core::option::Option<Self>
+pub struct hisi_rf_core::sle::AnnounceConfig
+impl hisi_rf_core::sle::AnnounceConfig
+pub const fn hisi_rf_core::sle::AnnounceConfig::channels(self) -> hisi_rf_core::sle::AnnounceChannels
+pub const fn hisi_rf_core::sle::AnnounceConfig::data(&self) -> &hisi_rf_core::sle::AnnouncePayload
+pub const fn hisi_rf_core::sle::AnnounceConfig::new(hisi_rf_core::sle::AnnounceTiming, hisi_rf_core::sle::AnnounceChannels, hisi_rf_core::sle::AnnouncePayload, hisi_rf_core::sle::AnnouncePayload) -> Self
+pub const fn hisi_rf_core::sle::AnnounceConfig::seek_response(&self) -> &hisi_rf_core::sle::AnnouncePayload
+pub const fn hisi_rf_core::sle::AnnounceConfig::timing(self) -> hisi_rf_core::sle::AnnounceTiming
+pub struct hisi_rf_core::sle::AnnounceInterval(_)
+impl hisi_rf_core::sle::AnnounceInterval
+pub const fn hisi_rf_core::sle::AnnounceInterval::as_units(self) -> u32
+pub const fn hisi_rf_core::sle::AnnounceInterval::try_from_units(u32) -> core::option::Option<Self>
+pub struct hisi_rf_core::sle::AnnouncePayload
+impl hisi_rf_core::sle::AnnouncePayload
+pub fn hisi_rf_core::sle::AnnouncePayload::as_bytes(&self) -> &[u8]
+pub fn hisi_rf_core::sle::AnnouncePayload::try_from_slice(&[u8]) -> core::option::Option<Self>
+pub struct hisi_rf_core::sle::AnnounceTiming
+impl hisi_rf_core::sle::AnnounceTiming
+pub const fn hisi_rf_core::sle::AnnounceTiming::maximum(self) -> hisi_rf_core::sle::AnnounceInterval
+pub const fn hisi_rf_core::sle::AnnounceTiming::minimum(self) -> hisi_rf_core::sle::AnnounceInterval
+pub const fn hisi_rf_core::sle::AnnounceTiming::try_new(hisi_rf_core::sle::AnnounceInterval, hisi_rf_core::sle::AnnounceInterval) -> core::option::Option<Self>
+pub struct hisi_rf_core::sle::SeekConfig
+impl hisi_rf_core::sle::SeekConfig
+pub const fn hisi_rf_core::sle::SeekConfig::filter_duplicates(self) -> bool
+pub const fn hisi_rf_core::sle::SeekConfig::new(hisi_rf_core::sle::SeekTiming, bool) -> Self
+pub const fn hisi_rf_core::sle::SeekConfig::timing(self) -> hisi_rf_core::sle::SeekTiming
+pub struct hisi_rf_core::sle::SeekInterval(_)
+impl hisi_rf_core::sle::SeekInterval
+pub const fn hisi_rf_core::sle::SeekInterval::as_units(self) -> u16
+pub const fn hisi_rf_core::sle::SeekInterval::try_from_units(u16) -> core::option::Option<Self>
+pub struct hisi_rf_core::sle::SeekTiming
+impl hisi_rf_core::sle::SeekTiming
+pub const fn hisi_rf_core::sle::SeekTiming::interval(self) -> hisi_rf_core::sle::SeekInterval
+pub const fn hisi_rf_core::sle::SeekTiming::try_new(hisi_rf_core::sle::SeekInterval, hisi_rf_core::sle::SeekInterval) -> core::option::Option<Self>
+pub const fn hisi_rf_core::sle::SeekTiming::window(self) -> hisi_rf_core::sle::SeekInterval
+pub struct hisi_rf_core::sle::SleAddress
+impl hisi_rf_core::sle::SleAddress
+pub const fn hisi_rf_core::sle::SleAddress::address_type(self) -> hisi_rf_core::sle::AddressType
+pub const fn hisi_rf_core::sle::SleAddress::bytes(self) -> [u8; 6]
+pub const fn hisi_rf_core::sle::SleAddress::try_new([u8; 6], hisi_rf_core::sle::AddressType) -> core::option::Option<Self>
 pub enum hisi_rf_core::BackendErrorClass
 pub hisi_rf_core::BackendErrorClass::BackendTimeout
 pub hisi_rf_core::BackendErrorClass::Busy
