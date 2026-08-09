@@ -9,7 +9,144 @@ use core::num::NonZeroU32;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::{Channel, TrySendError};
 use embassy_sync::signal::Signal;
-use portable_atomic::{AtomicBool, Ordering};
+use portable_atomic::{AtomicBool, AtomicU32, Ordering};
+
+/// Conservation snapshot for one bounded unsolicited-event queue.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EventQueueDiagnostics {
+    /// Events accepted from the runner.
+    pub accepted: u32,
+    /// Events consumed by the protocol handle.
+    pub consumed: u32,
+    /// Events rejected because the queue was full.
+    pub dropped: u32,
+    /// Events currently waiting for the protocol handle.
+    pub pending: usize,
+    /// Largest observed queue occupancy.
+    pub high_water: usize,
+}
+
+/// An unsolicited event could not enter the bounded queue.
+#[derive(Debug)]
+pub struct EventPublishError<E> {
+    event: E,
+}
+
+impl<E> EventPublishError<E> {
+    /// Recover the event rejected by backpressure.
+    pub fn into_inner(self) -> E {
+        self.event
+    }
+}
+
+/// Caller-owned state for unsolicited protocol events.
+///
+/// This queue is deliberately separate from [`ControlState`]: consuming an
+/// event can never consume or overwrite a command completion.
+pub struct EventState<E, const CAPACITY: usize> {
+    claimed: AtomicBool,
+    events: Channel<CriticalSectionRawMutex, E, CAPACITY>,
+    accepted: AtomicU32,
+    consumed: AtomicU32,
+    dropped: AtomicU32,
+    high_water: AtomicU32,
+}
+
+impl<E, const CAPACITY: usize> EventState<E, CAPACITY> {
+    /// Construct unclaimed event storage.
+    pub const fn new() -> Self {
+        assert!(CAPACITY > 0, "protocol event queue must not be empty");
+        Self {
+            claimed: AtomicBool::new(false),
+            events: Channel::new(),
+            accepted: AtomicU32::new(0),
+            consumed: AtomicU32::new(0),
+            dropped: AtomicU32::new(0),
+            high_water: AtomicU32::new(0),
+        }
+    }
+
+    /// Split the state into unique runner and protocol capabilities.
+    pub fn claim(
+        &'static self,
+    ) -> Option<(EventProducer<E, CAPACITY>, EventConsumer<E, CAPACITY>)> {
+        self.claimed
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()?;
+        Some((EventProducer { state: self }, EventConsumer { state: self }))
+    }
+
+    fn diagnostics(&self) -> EventQueueDiagnostics {
+        EventQueueDiagnostics {
+            accepted: self.accepted.load(Ordering::Relaxed),
+            consumed: self.consumed.load(Ordering::Relaxed),
+            dropped: self.dropped.load(Ordering::Relaxed),
+            pending: self.events.len(),
+            high_water: self.high_water.load(Ordering::Relaxed) as usize,
+        }
+    }
+}
+
+impl<E, const CAPACITY: usize> Default for EventState<E, CAPACITY> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Unique runner-side capability for publishing unsolicited events.
+pub struct EventProducer<E: 'static, const CAPACITY: usize> {
+    state: &'static EventState<E, CAPACITY>,
+}
+
+impl<E, const CAPACITY: usize> EventProducer<E, CAPACITY> {
+    /// Publish one event without blocking the radio runner.
+    pub fn try_publish(&mut self, event: E) -> Result<(), EventPublishError<E>> {
+        match self.state.events.try_send(event) {
+            Ok(()) => {
+                self.state.accepted.fetch_add(1, Ordering::Relaxed);
+                self.state
+                    .high_water
+                    .fetch_max(self.state.events.len() as u32, Ordering::Relaxed);
+                Ok(())
+            }
+            Err(TrySendError::Full(event)) => {
+                self.state.dropped.fetch_add(1, Ordering::Relaxed);
+                Err(EventPublishError { event })
+            }
+        }
+    }
+
+    /// Snapshot event conservation counters.
+    pub fn diagnostics(&self) -> EventQueueDiagnostics {
+        self.state.diagnostics()
+    }
+}
+
+/// Unique protocol-side capability for receiving unsolicited events.
+pub struct EventConsumer<E: 'static, const CAPACITY: usize> {
+    state: &'static EventState<E, CAPACITY>,
+}
+
+impl<E, const CAPACITY: usize> EventConsumer<E, CAPACITY> {
+    /// Take the oldest event without waiting.
+    pub fn try_next_event(&mut self) -> Option<E> {
+        let event = self.state.events.try_receive().ok()?;
+        self.state.consumed.fetch_add(1, Ordering::Relaxed);
+        Some(event)
+    }
+
+    /// Wait for and take the oldest event.
+    pub async fn next_event(&mut self) -> E {
+        let event = self.state.events.receive().await;
+        self.state.consumed.fetch_add(1, Ordering::Relaxed);
+        event
+    }
+
+    /// Snapshot event conservation counters.
+    pub fn diagnostics(&self) -> EventQueueDiagnostics {
+        self.state.diagnostics()
+    }
+}
 
 /// Generation-tagged identity for one accepted control command.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -288,6 +425,7 @@ impl<C, R> ControlReceiver<C, R> {
 mod tests {
     use super::*;
     use std::boxed::Box;
+    use std::task::{Context, Poll, Waker};
 
     fn state() -> &'static ControlState<u32, u32> {
         Box::leak(Box::new(ControlState::new()))
@@ -356,5 +494,46 @@ mod tests {
         assert_eq!(error.received(), id);
         assert_eq!(error.into_inner(), 5);
         assert_eq!(sender.outstanding(), None);
+    }
+
+    #[test]
+    fn event_queue_is_separate_bounded_and_conservative() {
+        let state = Box::leak(Box::new(EventState::<u32, 2>::new()));
+        let (mut producer, mut consumer) = state.claim().unwrap();
+        assert!(state.claim().is_none());
+
+        producer.try_publish(10).unwrap();
+        producer.try_publish(20).unwrap();
+        assert_eq!(producer.try_publish(30).unwrap_err().into_inner(), 30);
+        assert_eq!(
+            producer.diagnostics(),
+            EventQueueDiagnostics {
+                accepted: 2,
+                consumed: 0,
+                dropped: 1,
+                pending: 2,
+                high_water: 2,
+            }
+        );
+
+        assert_eq!(consumer.try_next_event(), Some(10));
+        assert_eq!(consumer.try_next_event(), Some(20));
+        assert_eq!(consumer.try_next_event(), None);
+        let diagnostics = consumer.diagnostics();
+        assert_eq!(diagnostics.accepted, diagnostics.consumed);
+        assert_eq!(diagnostics.pending, 0);
+        assert_eq!(diagnostics.dropped, 1);
+    }
+
+    #[test]
+    fn async_event_wait_is_woken_by_the_producer() {
+        let state = Box::leak(Box::new(EventState::<u32, 1>::new()));
+        let (mut producer, mut consumer) = state.claim().unwrap();
+        let mut future = core::pin::pin!(consumer.next_event());
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        assert!(matches!(future.as_mut().poll(&mut context), Poll::Pending));
+        producer.try_publish(42).unwrap();
+        assert_eq!(future.as_mut().poll(&mut context), Poll::Ready(42));
     }
 }
