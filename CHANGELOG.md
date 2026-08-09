@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add allocation-free typed GATT and SSAP database definitions with validated
+  UUIDs, permissions, properties, bounded values, and opaque handles.
+- Add a separately owned bounded unsolicited-event transport with async wake
+  and accepted/consumed/dropped/pending conservation diagnostics. Command
+  completions remain on their independent control channel.
 - Add chip-neutral, allocation-free BLE GAP and SLE announce/seek configuration
   types with validated addresses, timing relationships, channel maps, and
   bounded payload ownership. These contracts are the first U2 layer and do not
