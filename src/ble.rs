@@ -66,6 +66,93 @@ impl BluetoothAddress {
     }
 }
 
+/// Whether successful pairing should create a persistent bond.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Bonding {
+    /// Encrypt the active link without retaining long-term peer state.
+    Disabled,
+    /// Retain the peer relationship through an injected bond store.
+    Enabled,
+}
+
+/// Local input/output capabilities used by Bluetooth pairing association.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IoCapability {
+    /// The device can display a value but cannot confirm or enter one.
+    DisplayOnly,
+    /// The device can display a value and accept a yes/no confirmation.
+    DisplayYesNo,
+    /// The device can enter a value but cannot display one.
+    KeyboardOnly,
+    /// The device has no pairing input or output capability.
+    NoInputNoOutput,
+    /// The device can both display and enter a value.
+    KeyboardDisplay,
+}
+
+/// Minimum link-security property requested from the BLE host.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SecurityRequirement {
+    /// Unauthenticated pairing followed by link encryption.
+    Encrypted,
+    /// Authenticated pairing followed by link encryption.
+    Authenticated,
+    /// Authenticated LE Secure Connections pairing and encryption.
+    SecureConnectionsAuthenticated,
+}
+
+/// Validated BLE pairing policy.
+///
+/// The chip adapter maps this semantic policy to its own GAP security values;
+/// raw controller encodings and key bytes never cross this boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SecurityConfig {
+    bonding: Bonding,
+    io_capability: IoCapability,
+    requirement: SecurityRequirement,
+}
+
+impl SecurityConfig {
+    /// Construct an explicit pairing policy.
+    pub const fn new(
+        bonding: Bonding,
+        io_capability: IoCapability,
+        requirement: SecurityRequirement,
+    ) -> Self {
+        Self {
+            bonding,
+            io_capability,
+            requirement,
+        }
+    }
+
+    /// Whether a successful pairing should be retained.
+    pub const fn bonding(self) -> Bonding {
+        self.bonding
+    }
+
+    /// Local association-model capability.
+    pub const fn io_capability(self) -> IoCapability {
+        self.io_capability
+    }
+
+    /// Minimum security property required for completion.
+    pub const fn requirement(self) -> SecurityRequirement {
+        self.requirement
+    }
+}
+
+/// Pairing lifecycle state reported without exposing vendor encodings.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PairingState {
+    /// The peer has no active or completed pairing relationship.
+    NotPaired,
+    /// A pairing operation is in progress.
+    Pairing,
+    /// Pairing completed successfully for the active peer.
+    Paired,
+}
+
 const fn all_equal(bytes: [u8; 6], value: u8) -> bool {
     bytes[0] == value
         && bytes[1] == value
@@ -600,6 +687,23 @@ mod tests {
         assert!(AdvertisingPayload::try_from_slice(&[0; 32]).is_none());
         assert!(AdvertisingChannels::try_from_bits(0).is_none());
         assert!(AdvertisingChannels::try_from_bits(0x08).is_none());
+    }
+
+    #[test]
+    fn security_config_preserves_explicit_policy() {
+        const CONFIG: SecurityConfig = SecurityConfig::new(
+            Bonding::Enabled,
+            IoCapability::DisplayYesNo,
+            SecurityRequirement::SecureConnectionsAuthenticated,
+        );
+
+        assert_eq!(CONFIG.bonding(), Bonding::Enabled);
+        assert_eq!(CONFIG.io_capability(), IoCapability::DisplayYesNo);
+        assert_eq!(
+            CONFIG.requirement(),
+            SecurityRequirement::SecureConnectionsAuthenticated
+        );
+        assert_eq!(PairingState::NotPaired, PairingState::NotPaired);
     }
 
     #[test]
