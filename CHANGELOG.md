@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a separately owned bounded unsolicited-event transport with async wake
   and accepted/consumed/dropped/pending conservation diagnostics. Command
   completions remain on their independent control channel.
+- Add a generation-tagged lifecycle state machine with explicit start/active/
+  cancelling/terminal ownership, awaited stop results, stale-handle rejection,
+  and nonblocking best-effort cancellation when an active guard is dropped.
 - Add chip-neutral, allocation-free BLE GAP and SLE announce/seek configuration
   types with validated addresses, timing relationships, channel maps, and
   bounded payload ownership. These contracts are the first U2 layer and do not

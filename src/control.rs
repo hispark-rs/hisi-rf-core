@@ -4,8 +4,9 @@
 //! can share one implementation. Applications should use `hisi-rf` protocol
 //! handles instead of naming these transport types.
 
-use core::num::NonZeroU32;
+use core::{cell::RefCell, num::NonZeroU32};
 
+use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::{Channel, TrySendError};
 use embassy_sync::signal::Signal;
@@ -421,6 +422,306 @@ impl<C, R> ControlReceiver<C, R> {
     }
 }
 
+/// Generation-tagged identity for one active protocol lifecycle.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct LifecycleId(NonZeroU32);
+
+impl LifecycleId {
+    /// Return the stable non-zero representation.
+    pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LifecyclePhase {
+    Idle,
+    Starting(LifecycleId),
+    Active(LifecycleId),
+    Cancelling {
+        id: LifecycleId,
+        waiter_attached: bool,
+    },
+    Terminal(LifecycleId),
+}
+
+struct LifecycleInner {
+    next_generation: u32,
+    phase: LifecyclePhase,
+}
+
+/// A lifecycle cannot begin or transition from its current state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LifecycleStateError {
+    /// Another generation still owns the lifecycle.
+    Busy,
+    /// The supplied handle belongs to an older or unrelated generation.
+    Stale,
+    /// The requested transition is invalid for the current phase.
+    InvalidTransition,
+}
+
+struct LifecycleTerminal<E> {
+    id: LifecycleId,
+    result: Result<(), E>,
+}
+
+/// Error returned by an explicit lifecycle stop.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LifecycleStopError<E> {
+    /// The guard no longer names the current lifecycle generation.
+    Stale,
+    /// The backend rejected or failed the stop operation.
+    Backend(E),
+}
+
+/// Caller-owned state for one generation-tagged active lifecycle.
+///
+/// The state has one runner owner and at most one active guard. Dropping the
+/// guard submits a nonblocking best-effort cancellation. Calling
+/// [`LifecycleGuard::stop`] keeps a waiter attached until the runner publishes
+/// the terminal backend result.
+pub struct LifecycleState<E> {
+    claimed: AtomicBool,
+    inner: Mutex<CriticalSectionRawMutex, RefCell<LifecycleInner>>,
+    cancellation: Signal<CriticalSectionRawMutex, LifecycleId>,
+    terminal: Signal<CriticalSectionRawMutex, LifecycleTerminal<E>>,
+}
+
+impl<E> LifecycleState<E> {
+    /// Construct unclaimed lifecycle storage.
+    pub const fn new() -> Self {
+        Self {
+            claimed: AtomicBool::new(false),
+            inner: Mutex::new(RefCell::new(LifecycleInner {
+                next_generation: 0,
+                phase: LifecyclePhase::Idle,
+            })),
+            cancellation: Signal::new(),
+            terminal: Signal::new(),
+        }
+    }
+
+    /// Claim the unique runner capability.
+    pub fn claim(&'static self) -> Option<LifecycleRunner<E>> {
+        self.claimed
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()?;
+        Some(LifecycleRunner { state: self })
+    }
+
+    fn request_cancel(
+        &self,
+        id: LifecycleId,
+        waiter_attached: bool,
+    ) -> Result<(), LifecycleStateError> {
+        let outcome = self.inner.lock(|inner| {
+            let mut inner = inner.borrow_mut();
+            match inner.phase {
+                LifecyclePhase::Starting(current) | LifecyclePhase::Active(current)
+                    if current == id =>
+                {
+                    inner.phase = LifecyclePhase::Cancelling {
+                        id,
+                        waiter_attached,
+                    };
+                    Ok(true)
+                }
+                LifecyclePhase::Cancelling { id: current, .. } if current == id => Ok(false),
+                LifecyclePhase::Terminal(current) if current == id => Ok(false),
+                LifecyclePhase::Idle
+                | LifecyclePhase::Starting(_)
+                | LifecyclePhase::Active(_)
+                | LifecyclePhase::Cancelling { .. }
+                | LifecyclePhase::Terminal(_) => Err(LifecycleStateError::Stale),
+            }
+        })?;
+        if outcome {
+            self.cancellation.signal(id);
+        }
+        Ok(())
+    }
+
+    fn detach_waiter(&self, id: LifecycleId) {
+        self.inner.lock(|inner| {
+            let mut inner = inner.borrow_mut();
+            match inner.phase {
+                LifecyclePhase::Cancelling {
+                    id: current,
+                    waiter_attached: true,
+                } if current == id => {
+                    inner.phase = LifecyclePhase::Cancelling {
+                        id,
+                        waiter_attached: false,
+                    };
+                }
+                LifecyclePhase::Terminal(current) if current == id => {
+                    let _ = self.terminal.try_take();
+                    inner.phase = LifecyclePhase::Idle;
+                }
+                _ => {}
+            }
+        });
+    }
+
+    fn acknowledge_terminal(&self, id: LifecycleId) -> Result<(), LifecycleStateError> {
+        self.inner.lock(|inner| {
+            let mut inner = inner.borrow_mut();
+            match inner.phase {
+                LifecyclePhase::Terminal(current) if current == id => {
+                    inner.phase = LifecyclePhase::Idle;
+                    Ok(())
+                }
+                _ => Err(LifecycleStateError::Stale),
+            }
+        })
+    }
+}
+
+impl<E> Default for LifecycleState<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Unique runner-side lifecycle state-machine capability.
+pub struct LifecycleRunner<E: 'static> {
+    state: &'static LifecycleState<E>,
+}
+
+impl<E> LifecycleRunner<E> {
+    /// Reserve a fresh generation before submitting a backend start request.
+    pub fn begin(&mut self) -> Result<LifecycleId, LifecycleStateError> {
+        self.state.inner.lock(|inner| {
+            let mut inner = inner.borrow_mut();
+            if inner.phase != LifecyclePhase::Idle {
+                return Err(LifecycleStateError::Busy);
+            }
+            inner.next_generation = inner.next_generation.wrapping_add(1);
+            if inner.next_generation == 0 {
+                inner.next_generation = 1;
+            }
+            let id = LifecycleId(
+                NonZeroU32::new(inner.next_generation).expect("generation is non-zero"),
+            );
+            inner.phase = LifecyclePhase::Starting(id);
+            Ok(id)
+        })
+    }
+
+    /// Abort a start request that the backend rejected synchronously.
+    pub fn abort_start(&mut self, id: LifecycleId) -> Result<(), LifecycleStateError> {
+        self.state.inner.lock(|inner| {
+            let mut inner = inner.borrow_mut();
+            match inner.phase {
+                LifecyclePhase::Starting(current) if current == id => {
+                    inner.phase = LifecyclePhase::Idle;
+                    Ok(())
+                }
+                _ => Err(LifecycleStateError::Stale),
+            }
+        })
+    }
+
+    /// Convert the matching backend start callback into the unique active guard.
+    pub fn activate(&mut self, id: LifecycleId) -> Result<LifecycleGuard<E>, LifecycleStateError> {
+        self.state.inner.lock(|inner| {
+            let mut inner = inner.borrow_mut();
+            match inner.phase {
+                LifecyclePhase::Starting(current) if current == id => {
+                    inner.phase = LifecyclePhase::Active(id);
+                    Ok(LifecycleGuard {
+                        state: self.state,
+                        id,
+                        cancel_requested: false,
+                        terminal_consumed: false,
+                    })
+                }
+                _ => Err(LifecycleStateError::Stale),
+            }
+        })
+    }
+
+    /// Take one cancellation request without waiting.
+    pub fn try_take_cancel(&mut self) -> Option<LifecycleId> {
+        self.state.cancellation.try_take()
+    }
+
+    /// Publish the terminal result of the matching backend stop operation.
+    pub fn finish(
+        &mut self,
+        id: LifecycleId,
+        result: Result<(), E>,
+    ) -> Result<(), LifecycleStateError> {
+        let waiter_attached = self.state.inner.lock(|inner| {
+            let mut inner = inner.borrow_mut();
+            match inner.phase {
+                LifecyclePhase::Cancelling {
+                    id: current,
+                    waiter_attached,
+                } if current == id => {
+                    inner.phase = if waiter_attached {
+                        LifecyclePhase::Terminal(id)
+                    } else {
+                        LifecyclePhase::Idle
+                    };
+                    Ok(waiter_attached)
+                }
+                _ => Err(LifecycleStateError::Stale),
+            }
+        })?;
+        if waiter_attached {
+            self.state.terminal.signal(LifecycleTerminal { id, result });
+        }
+        Ok(())
+    }
+}
+
+/// Unique active lifecycle token.
+#[must_use = "dropping an active lifecycle guard requests best-effort cancellation"]
+pub struct LifecycleGuard<E: 'static> {
+    state: &'static LifecycleState<E>,
+    id: LifecycleId,
+    cancel_requested: bool,
+    terminal_consumed: bool,
+}
+
+impl<E> LifecycleGuard<E> {
+    /// Identity shared by start, cancellation, and terminal observations.
+    pub const fn id(&self) -> LifecycleId {
+        self.id
+    }
+
+    /// Request cancellation and wait for the runner's backend result.
+    pub async fn stop(mut self) -> Result<(), LifecycleStopError<E>> {
+        if self.state.request_cancel(self.id, true).is_err() {
+            self.terminal_consumed = true;
+            return Err(LifecycleStopError::Stale);
+        }
+        self.cancel_requested = true;
+        let terminal = self.state.terminal.wait().await;
+        if terminal.id != self.id || self.state.acknowledge_terminal(self.id).is_err() {
+            self.terminal_consumed = true;
+            return Err(LifecycleStopError::Stale);
+        }
+        self.terminal_consumed = true;
+        terminal.result.map_err(LifecycleStopError::Backend)
+    }
+}
+
+impl<E> Drop for LifecycleGuard<E> {
+    fn drop(&mut self) {
+        if self.terminal_consumed {
+            return;
+        }
+        if self.cancel_requested {
+            self.state.detach_waiter(self.id);
+        } else {
+            let _ = self.state.request_cancel(self.id, false);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -535,5 +836,90 @@ mod tests {
         assert!(matches!(future.as_mut().poll(&mut context), Poll::Pending));
         producer.try_publish(42).unwrap();
         assert_eq!(future.as_mut().poll(&mut context), Poll::Ready(42));
+    }
+
+    #[test]
+    fn explicit_lifecycle_stop_waits_for_matching_terminal_result() {
+        let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
+        let mut runner = state.claim().unwrap();
+        assert!(state.claim().is_none());
+        let id = runner.begin().unwrap();
+        let guard = runner.activate(id).unwrap();
+        let mut stop = Box::pin(guard.stop());
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        assert!(matches!(stop.as_mut().poll(&mut context), Poll::Pending));
+        assert_eq!(runner.try_take_cancel(), Some(id));
+        runner.finish(id, Ok(())).unwrap();
+        assert_eq!(stop.as_mut().poll(&mut context), Poll::Ready(Ok(())));
+        assert_ne!(runner.begin().unwrap(), id);
+    }
+
+    #[test]
+    fn dropped_lifecycle_guard_requests_detached_best_effort_cancel() {
+        let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
+        let mut runner = state.claim().unwrap();
+        let id = runner.begin().unwrap();
+        drop(runner.activate(id).unwrap());
+        assert_eq!(runner.try_take_cancel(), Some(id));
+        runner.finish(id, Err(7)).unwrap();
+        assert!(runner.begin().is_ok());
+    }
+
+    #[test]
+    fn dropping_an_inflight_stop_waiter_does_not_strand_the_lifecycle() {
+        let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
+        let mut runner = state.claim().unwrap();
+        let id = runner.begin().unwrap();
+        let guard = runner.activate(id).unwrap();
+        let mut stop = Box::pin(guard.stop());
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        assert!(matches!(stop.as_mut().poll(&mut context), Poll::Pending));
+        assert_eq!(runner.try_take_cancel(), Some(id));
+        drop(stop);
+        runner.finish(id, Ok(())).unwrap();
+        assert!(runner.begin().is_ok());
+    }
+
+    #[test]
+    fn explicit_lifecycle_stop_preserves_backend_error() {
+        let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
+        let mut runner = state.claim().unwrap();
+        let id = runner.begin().unwrap();
+        let guard = runner.activate(id).unwrap();
+        let mut stop = core::pin::pin!(guard.stop());
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        assert!(matches!(stop.as_mut().poll(&mut context), Poll::Pending));
+        assert_eq!(runner.try_take_cancel(), Some(id));
+        runner.finish(id, Err(0x1234)).unwrap();
+        assert_eq!(
+            stop.as_mut().poll(&mut context),
+            Poll::Ready(Err(LifecycleStopError::Backend(0x1234)))
+        );
+    }
+
+    #[test]
+    fn lifecycle_generation_and_transitions_fail_closed() {
+        let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
+        let mut runner = state.claim().unwrap();
+        let first = runner.begin().unwrap();
+        assert_eq!(runner.begin(), Err(LifecycleStateError::Busy));
+        assert_eq!(runner.abort_start(first), Ok(()));
+        let second = runner.begin().unwrap();
+        assert_ne!(first, second);
+        assert!(matches!(
+            runner.activate(first),
+            Err(LifecycleStateError::Stale)
+        ));
+        let guard = runner.activate(second).unwrap();
+        assert_eq!(
+            runner.finish(first, Ok(())),
+            Err(LifecycleStateError::Stale)
+        );
+        drop(guard);
+        assert_eq!(runner.try_take_cancel(), Some(second));
+        runner.finish(second, Ok(())).unwrap();
     }
 }
