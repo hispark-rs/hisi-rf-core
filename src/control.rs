@@ -675,6 +675,44 @@ impl<E> LifecycleRunner<E> {
         }
         Ok(())
     }
+
+    /// Terminate a lifecycle after an unsolicited backend stop.
+    ///
+    /// An active guard becomes stale. If an explicit stop waiter already owns
+    /// the generation, it receives `result` through the normal terminal path.
+    pub fn terminate(
+        &mut self,
+        id: LifecycleId,
+        result: Result<(), E>,
+    ) -> Result<(), LifecycleStateError> {
+        let waiter_attached = self.state.inner.lock(|inner| {
+            let mut inner = inner.borrow_mut();
+            match inner.phase {
+                LifecyclePhase::Starting(current) | LifecyclePhase::Active(current)
+                    if current == id =>
+                {
+                    inner.phase = LifecyclePhase::Idle;
+                    Ok(false)
+                }
+                LifecyclePhase::Cancelling {
+                    id: current,
+                    waiter_attached,
+                } if current == id => {
+                    inner.phase = if waiter_attached {
+                        LifecyclePhase::Terminal(id)
+                    } else {
+                        LifecyclePhase::Idle
+                    };
+                    Ok(waiter_attached)
+                }
+                _ => Err(LifecycleStateError::Stale),
+            }
+        })?;
+        if waiter_attached {
+            self.state.terminal.signal(LifecycleTerminal { id, result });
+        }
+        Ok(())
+    }
 }
 
 /// Unique active lifecycle token.
@@ -898,6 +936,39 @@ mod tests {
             stop.as_mut().poll(&mut context),
             Poll::Ready(Err(LifecycleStopError::Backend(0x1234)))
         );
+    }
+
+    #[test]
+    fn unsolicited_backend_termination_invalidates_guard_and_releases_generation() {
+        let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
+        let mut runner = state.claim().unwrap();
+        let id = runner.begin().unwrap();
+        let guard = runner.activate(id).unwrap();
+
+        runner.terminate(id, Ok(())).unwrap();
+        drop(guard);
+        assert_eq!(runner.try_take_cancel(), None);
+        assert!(runner.begin().is_ok());
+    }
+
+    #[test]
+    fn unsolicited_backend_termination_completes_an_attached_stop_waiter() {
+        let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
+        let mut runner = state.claim().unwrap();
+        let id = runner.begin().unwrap();
+        let guard = runner.activate(id).unwrap();
+        let mut stop = core::pin::pin!(guard.stop());
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        assert!(matches!(stop.as_mut().poll(&mut context), Poll::Pending));
+        assert_eq!(runner.try_take_cancel(), Some(id));
+
+        runner.terminate(id, Err(0x55)).unwrap();
+        assert_eq!(
+            stop.as_mut().poll(&mut context),
+            Poll::Ready(Err(LifecycleStopError::Backend(0x55)))
+        );
+        assert!(runner.begin().is_ok());
     }
 
     #[test]

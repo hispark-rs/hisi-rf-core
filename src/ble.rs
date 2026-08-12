@@ -15,6 +15,43 @@ pub enum AddressType {
     NonResolvablePrivate,
 }
 
+/// Measured receive signal strength in dBm.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RssiDbm(i8);
+
+impl RssiDbm {
+    /// Convert a controller measurement, treating the Bluetooth `0x7f`
+    /// sentinel as unavailable.
+    pub const fn from_controller(value: i8) -> Option<Self> {
+        if value == 0x7f {
+            None
+        } else {
+            Some(Self(value))
+        }
+    }
+
+    /// Return the signed dBm measurement.
+    pub const fn get(self) -> i8 {
+        self.0
+    }
+}
+
+/// Controller-reported BLE link termination reason.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DisconnectReason(u32);
+
+impl DisconnectReason {
+    /// Preserve one vendor reason without making raw values part of control flow.
+    pub const fn from_vendor(value: u32) -> Self {
+        Self(value)
+    }
+
+    /// Return the diagnostic vendor representation.
+    pub const fn vendor_code(self) -> u32 {
+        self.0
+    }
+}
+
 /// Validated BLE device address.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothAddress {
