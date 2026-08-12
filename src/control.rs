@@ -609,6 +609,12 @@ impl<E> LifecycleRunner<E> {
         })
     }
 
+    /// Adopt an unsolicited backend lifecycle and return its active guard.
+    pub fn adopt(&mut self) -> Result<LifecycleGuard<E>, LifecycleStateError> {
+        let id = self.begin()?;
+        self.activate(id)
+    }
+
     /// Abort a start request that the backend rejected synchronously.
     pub fn abort_start(&mut self, id: LifecycleId) -> Result<(), LifecycleStateError> {
         self.state.inner.lock(|inner| {
@@ -949,6 +955,18 @@ mod tests {
         drop(guard);
         assert_eq!(runner.try_take_cancel(), None);
         assert!(runner.begin().is_ok());
+    }
+
+    #[test]
+    fn unsolicited_backend_lifecycle_can_be_adopted_once() {
+        let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
+        let mut runner = state.claim().unwrap();
+        let guard = runner.adopt().unwrap();
+        let id = guard.id();
+        assert!(matches!(runner.adopt(), Err(LifecycleStateError::Busy)));
+        runner.terminate(id, Ok(())).unwrap();
+        drop(guard);
+        assert!(runner.adopt().is_ok());
     }
 
     #[test]
