@@ -9,6 +9,10 @@ pub enum AddressType {
     Public,
     /// Static random device address.
     RandomStatic,
+    /// Resolvable private address whose identity may be resolved by an IRK.
+    ResolvablePrivate,
+    /// Non-resolvable private address used only as an ephemeral identity.
+    NonResolvablePrivate,
 }
 
 /// Validated BLE device address.
@@ -52,6 +56,40 @@ impl BluetoothAddress {
                 bytes,
                 kind: AddressType::RandomStatic,
             })
+        }
+    }
+
+    /// Classify and validate a controller-reported random device address.
+    ///
+    /// The two most-significant bits distinguish non-resolvable private,
+    /// resolvable private, and static random addresses. The reserved `10`
+    /// pattern is rejected.
+    pub const fn random(bytes: [u8; 6]) -> Option<Self> {
+        match bytes[5] & 0xc0 {
+            0xc0 => Self::random_static(bytes),
+            0x40 => {
+                let random_part =
+                    bytes[3] as u32 | ((bytes[4] as u32) << 8) | (((bytes[5] & 0x3f) as u32) << 16);
+                if random_part == 0 || random_part == 0x3f_ffff {
+                    None
+                } else {
+                    Some(Self {
+                        bytes,
+                        kind: AddressType::ResolvablePrivate,
+                    })
+                }
+            }
+            0x00 => {
+                if all_equal(bytes, 0) {
+                    None
+                } else {
+                    Some(Self {
+                        bytes,
+                        kind: AddressType::NonResolvablePrivate,
+                    })
+                }
+            }
+            _ => None,
         }
     }
 
@@ -675,10 +713,27 @@ mod tests {
         assert!(BluetoothAddress::random_static([1, 2, 3, 4, 5, 0x80]).is_none());
         assert!(BluetoothAddress::random_static([0, 0, 0, 0, 0, 0xc0]).is_none());
         assert!(BluetoothAddress::random_static([0xff; 6]).is_none());
+        assert!(BluetoothAddress::random([1, 2, 3, 4, 5, 0x80]).is_none());
+        assert!(BluetoothAddress::random([0; 6]).is_none());
         assert!(AdvertisingInterval::try_from_units(0x1f).is_none());
         let interval = ScanInterval::try_from_units(0x20).unwrap();
         let window = ScanInterval::try_from_units(0x30).unwrap();
         assert!(ScanTiming::try_new(interval, window).is_none());
+    }
+
+    #[test]
+    fn classifies_controller_random_addresses() {
+        let static_address = BluetoothAddress::random([1, 2, 3, 4, 5, 0xc0]).unwrap();
+        assert_eq!(static_address.address_type(), AddressType::RandomStatic);
+
+        let resolvable = BluetoothAddress::random([1, 2, 3, 4, 5, 0x40]).unwrap();
+        assert_eq!(resolvable.address_type(), AddressType::ResolvablePrivate);
+
+        let non_resolvable = BluetoothAddress::random([1, 2, 3, 4, 5, 0x00]).unwrap();
+        assert_eq!(
+            non_resolvable.address_type(),
+            AddressType::NonResolvablePrivate
+        );
     }
 
     #[test]
