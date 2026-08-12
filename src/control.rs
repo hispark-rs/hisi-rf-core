@@ -590,6 +590,17 @@ pub struct LifecycleRunner<E: 'static> {
 }
 
 impl<E> LifecycleRunner<E> {
+    /// Return whether `id` still owns the active lifecycle generation.
+    ///
+    /// Commands tied to an active resource use this immediately before
+    /// touching their backend so a queued command cannot act on a disconnected
+    /// or cancelling generation.
+    pub fn is_active(&self, id: LifecycleId) -> bool {
+        self.state.inner.lock(|inner| {
+            matches!(inner.borrow().phase, LifecyclePhase::Active(current) if current == id)
+        })
+    }
+
     /// Reserve a fresh generation before submitting a backend start request.
     pub fn begin(&mut self) -> Result<LifecycleId, LifecycleStateError> {
         self.state.inner.lock(|inner| {
@@ -994,6 +1005,7 @@ mod tests {
         let state = Box::leak(Box::new(LifecycleState::<u32>::new()));
         let mut runner = state.claim().unwrap();
         let first = runner.begin().unwrap();
+        assert!(!runner.is_active(first));
         assert_eq!(runner.begin(), Err(LifecycleStateError::Busy));
         assert_eq!(runner.abort_start(first), Ok(()));
         let second = runner.begin().unwrap();
@@ -1003,11 +1015,14 @@ mod tests {
             Err(LifecycleStateError::Stale)
         ));
         let guard = runner.activate(second).unwrap();
+        assert!(runner.is_active(second));
+        assert!(!runner.is_active(first));
         assert_eq!(
             runner.finish(first, Ok(())),
             Err(LifecycleStateError::Stale)
         );
         drop(guard);
+        assert!(!runner.is_active(second));
         assert_eq!(runner.try_take_cancel(), Some(second));
         runner.finish(second, Ok(())).unwrap();
     }
