@@ -1,14 +1,33 @@
 pub mod hisi_rf_core
 pub mod hisi_rf_core::ble
 pub enum hisi_rf_core::ble::AddressType
+pub hisi_rf_core::ble::AddressType::NonResolvablePrivate
 pub hisi_rf_core::ble::AddressType::Public
 pub hisi_rf_core::ble::AddressType::RandomStatic
+pub hisi_rf_core::ble::AddressType::ResolvablePrivate
+pub enum hisi_rf_core::ble::Bonding
+pub hisi_rf_core::ble::Bonding::Disabled
+pub hisi_rf_core::ble::Bonding::Enabled
 pub enum hisi_rf_core::ble::GattUuid
 pub hisi_rf_core::ble::GattUuid::Uuid128([u8; 16])
 pub hisi_rf_core::ble::GattUuid::Uuid16(u16)
+pub enum hisi_rf_core::ble::IoCapability
+pub hisi_rf_core::ble::IoCapability::DisplayOnly
+pub hisi_rf_core::ble::IoCapability::DisplayYesNo
+pub hisi_rf_core::ble::IoCapability::KeyboardDisplay
+pub hisi_rf_core::ble::IoCapability::KeyboardOnly
+pub hisi_rf_core::ble::IoCapability::NoInputNoOutput
+pub enum hisi_rf_core::ble::PairingState
+pub hisi_rf_core::ble::PairingState::NotPaired
+pub hisi_rf_core::ble::PairingState::Paired
+pub hisi_rf_core::ble::PairingState::Pairing
 pub enum hisi_rf_core::ble::ScanMode
 pub hisi_rf_core::ble::ScanMode::Active
 pub hisi_rf_core::ble::ScanMode::Passive
+pub enum hisi_rf_core::ble::SecurityRequirement
+pub hisi_rf_core::ble::SecurityRequirement::Authenticated
+pub hisi_rf_core::ble::SecurityRequirement::Encrypted
+pub hisi_rf_core::ble::SecurityRequirement::SecureConnectionsAuthenticated
 pub struct hisi_rf_core::ble::AdvertisingChannels(_)
 impl hisi_rf_core::ble::AdvertisingChannels
 pub const hisi_rf_core::ble::AdvertisingChannels::ALL: Self
@@ -38,7 +57,12 @@ impl hisi_rf_core::ble::BluetoothAddress
 pub const fn hisi_rf_core::ble::BluetoothAddress::address_type(self) -> hisi_rf_core::ble::AddressType
 pub const fn hisi_rf_core::ble::BluetoothAddress::bytes(self) -> [u8; 6]
 pub const fn hisi_rf_core::ble::BluetoothAddress::public([u8; 6]) -> core::option::Option<Self>
+pub const fn hisi_rf_core::ble::BluetoothAddress::random([u8; 6]) -> core::option::Option<Self>
 pub const fn hisi_rf_core::ble::BluetoothAddress::random_static([u8; 6]) -> core::option::Option<Self>
+pub struct hisi_rf_core::ble::DisconnectReason(_)
+impl hisi_rf_core::ble::DisconnectReason
+pub const fn hisi_rf_core::ble::DisconnectReason::from_vendor(u32) -> Self
+pub const fn hisi_rf_core::ble::DisconnectReason::vendor_code(self) -> u32
 pub struct hisi_rf_core::ble::GattCharacteristicDefinition
 impl hisi_rf_core::ble::GattCharacteristicDefinition
 pub const fn hisi_rf_core::ble::GattCharacteristicDefinition::descriptors(self) -> &'static [hisi_rf_core::ble::GattDescriptorDefinition]
@@ -81,6 +105,10 @@ pub const fn hisi_rf_core::ble::GattServiceDefinition::characteristics(self) -> 
 pub const fn hisi_rf_core::ble::GattServiceDefinition::is_primary(self) -> bool
 pub const fn hisi_rf_core::ble::GattServiceDefinition::try_new(hisi_rf_core::ble::GattUuid, bool, &'static [hisi_rf_core::ble::GattCharacteristicDefinition]) -> core::option::Option<Self>
 pub const fn hisi_rf_core::ble::GattServiceDefinition::uuid(self) -> hisi_rf_core::ble::GattUuid
+pub struct hisi_rf_core::ble::RssiDbm(_)
+impl hisi_rf_core::ble::RssiDbm
+pub const fn hisi_rf_core::ble::RssiDbm::from_controller(i8) -> core::option::Option<Self>
+pub const fn hisi_rf_core::ble::RssiDbm::get(self) -> i8
 pub struct hisi_rf_core::ble::ScanConfig
 impl hisi_rf_core::ble::ScanConfig
 pub const fn hisi_rf_core::ble::ScanConfig::filter_duplicates(self) -> bool
@@ -96,6 +124,12 @@ impl hisi_rf_core::ble::ScanTiming
 pub const fn hisi_rf_core::ble::ScanTiming::interval(self) -> hisi_rf_core::ble::ScanInterval
 pub const fn hisi_rf_core::ble::ScanTiming::try_new(hisi_rf_core::ble::ScanInterval, hisi_rf_core::ble::ScanInterval) -> core::option::Option<Self>
 pub const fn hisi_rf_core::ble::ScanTiming::window(self) -> hisi_rf_core::ble::ScanInterval
+pub struct hisi_rf_core::ble::SecurityConfig
+impl hisi_rf_core::ble::SecurityConfig
+pub const fn hisi_rf_core::ble::SecurityConfig::bonding(self) -> hisi_rf_core::ble::Bonding
+pub const fn hisi_rf_core::ble::SecurityConfig::io_capability(self) -> hisi_rf_core::ble::IoCapability
+pub const fn hisi_rf_core::ble::SecurityConfig::new(hisi_rf_core::ble::Bonding, hisi_rf_core::ble::IoCapability, hisi_rf_core::ble::SecurityRequirement) -> Self
+pub const fn hisi_rf_core::ble::SecurityConfig::requirement(self) -> hisi_rf_core::ble::SecurityRequirement
 pub mod hisi_rf_core::sle
 pub enum hisi_rf_core::sle::AddressType
 pub hisi_rf_core::sle::AddressType::Public
