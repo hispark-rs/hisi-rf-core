@@ -228,6 +228,39 @@ pub enum PairingState {
     Paired,
 }
 
+/// Validated six-digit Bluetooth pairing passkey.
+///
+/// The numeric value is deliberately omitted from [`core::fmt::Debug`] output
+/// so diagnostics cannot accidentally disclose an active pairing secret.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct Passkey(u32);
+
+impl Passkey {
+    /// Largest value representable by the Bluetooth six-digit passkey field.
+    pub const MAX: u32 = 999_999;
+
+    /// Validate a passkey received from a trusted UI or controller prompt.
+    pub const fn try_new(value: u32) -> Option<Self> {
+        if value <= Self::MAX {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// Return the validated numeric value for a chip integration adapter.
+    #[doc(hidden)]
+    pub const fn as_u32(self) -> u32 {
+        self.0
+    }
+}
+
+impl core::fmt::Debug for Passkey {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("Passkey([REDACTED])")
+    }
+}
+
 const fn all_equal(bytes: [u8; 6], value: u8) -> bool {
     bytes[0] == value
         && bytes[1] == value
@@ -796,6 +829,17 @@ mod tests {
             SecurityRequirement::SecureConnectionsAuthenticated
         );
         assert_eq!(PairingState::NotPaired, PairingState::NotPaired);
+    }
+
+    #[test]
+    fn passkey_is_bounded_and_redacted() {
+        assert_eq!(Passkey::try_new(0).unwrap().as_u32(), 0);
+        assert_eq!(Passkey::try_new(Passkey::MAX).unwrap().as_u32(), 999_999);
+        assert!(Passkey::try_new(Passkey::MAX + 1).is_none());
+        assert_eq!(
+            std::format!("{:?}", Passkey::try_new(123_456).unwrap()),
+            "Passkey([REDACTED])"
+        );
     }
 
     #[test]
