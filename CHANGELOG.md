@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   duplicate generation-tagged completions without exposing backend work to the
   controller context.
 
+## [0.1.0-alpha.23] - 2026-08-20
+
+### Added
+
+- Add a validated six-digit BLE `Passkey` value whose debug representation is
+  redacted and whose numeric representation remains internal to integration
+  crates.
+
 ## [0.1.0-alpha.21] - 2026-08-03
 
 ### Added
