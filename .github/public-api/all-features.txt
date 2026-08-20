@@ -105,6 +105,12 @@ pub const fn hisi_rf_core::ble::GattServiceDefinition::characteristics(self) -> 
 pub const fn hisi_rf_core::ble::GattServiceDefinition::is_primary(self) -> bool
 pub const fn hisi_rf_core::ble::GattServiceDefinition::try_new(hisi_rf_core::ble::GattUuid, bool, &'static [hisi_rf_core::ble::GattCharacteristicDefinition]) -> core::option::Option<Self>
 pub const fn hisi_rf_core::ble::GattServiceDefinition::uuid(self) -> hisi_rf_core::ble::GattUuid
+pub struct hisi_rf_core::ble::Passkey(_)
+impl hisi_rf_core::ble::Passkey
+pub const hisi_rf_core::ble::Passkey::MAX: u32
+pub const fn hisi_rf_core::ble::Passkey::try_new(u32) -> core::option::Option<Self>
+impl core::fmt::Debug for hisi_rf_core::ble::Passkey
+pub fn hisi_rf_core::ble::Passkey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct hisi_rf_core::ble::RssiDbm(_)
 impl hisi_rf_core::ble::RssiDbm
 pub const fn hisi_rf_core::ble::RssiDbm::from_controller(i8) -> core::option::Option<Self>
