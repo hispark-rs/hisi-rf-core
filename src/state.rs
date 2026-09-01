@@ -97,6 +97,8 @@ pub(crate) struct SharedState<const EVENTS: usize> {
     pub(crate) cancellations: Channel<CriticalSectionRawMutex, u32, 3>,
     pub(crate) completion: Signal<CriticalSectionRawMutex, Completion>,
     pub(crate) events: Channel<CriticalSectionRawMutex, WifiEvent, EVENTS>,
+    pub(crate) accepted_events: AtomicU32,
+    pub(crate) consumed_events: AtomicU32,
     pub(crate) dropped_events: AtomicU32,
     pub(crate) event_high_water: AtomicU32,
     pub(crate) command_high_water: AtomicU32,
@@ -128,6 +130,8 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
             cancellations: Channel::new(),
             completion: Signal::new(),
             events: Channel::new(),
+            accepted_events: AtomicU32::new(0),
+            consumed_events: AtomicU32::new(0),
             dropped_events: AtomicU32::new(0),
             event_high_water: AtomicU32::new(0),
             command_high_water: AtomicU32::new(0),
@@ -162,12 +166,15 @@ impl<const EVENTS: usize> SharedState<EVENTS> {
 
     pub(crate) fn publish_event(&self, event: WifiEvent) {
         if self.events.try_send(event).is_ok() {
+            saturating_increment(&self.accepted_events);
             self.record_event_depth();
             return;
         }
         let _ = self.events.try_receive();
         saturating_increment(&self.dropped_events);
-        let _ = self.events.try_send(event);
+        if self.events.try_send(event).is_ok() {
+            saturating_increment(&self.accepted_events);
+        }
         self.record_event_depth();
     }
 

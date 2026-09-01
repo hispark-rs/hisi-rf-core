@@ -468,6 +468,10 @@ pub enum WifiEvent {
 pub struct EventDiagnostics {
     /// Compile-time queue depth.
     pub capacity: usize,
+    /// Events accepted into the bounded queue.
+    pub accepted: u32,
+    /// Events consumed by the controller.
+    pub consumed: u32,
     /// Events currently waiting for the controller.
     pub pending: usize,
     /// Largest observed queue occupancy since initialization.
@@ -802,13 +806,17 @@ impl<const EVENTS: usize> WifiController<EVENTS> {
 
     /// Wait for the next bounded event produced by the runner.
     pub async fn next_event(&mut self) -> WifiEvent {
-        self.state.shared.events.receive().await
+        let event = self.state.shared.events.receive().await;
+        saturating_increment(&self.state.shared.consumed_events);
+        event
     }
 
     /// Snapshot queue occupancy and overflow.
     pub fn event_diagnostics(&self) -> EventDiagnostics {
         EventDiagnostics {
             capacity: EVENTS,
+            accepted: self.state.shared.accepted_events.load(Ordering::Relaxed),
+            consumed: self.state.shared.consumed_events.load(Ordering::Relaxed),
             pending: self.state.shared.events.len(),
             high_water: usize::try_from(self.state.shared.event_high_water.load(Ordering::Relaxed))
                 .unwrap_or(usize::MAX),
@@ -1343,6 +1351,8 @@ mod tests {
             wifi.controller.event_diagnostics(),
             EventDiagnostics {
                 capacity: 1,
+                accepted: 2,
+                consumed: 0,
                 pending: 1,
                 high_water: 1,
                 dropped: 1,
@@ -1398,13 +1408,28 @@ mod tests {
             wifi.controller.event_diagnostics(),
             EventDiagnostics {
                 capacity: 2,
+                accepted: 1,
+                consumed: 0,
                 pending: 1,
                 high_water: 1,
                 dropped: 0,
             }
         );
-        let mut event = core::pin::pin!(wifi.controller.next_event());
-        assert_eq!(poll(event.as_mut()), Poll::Ready(WifiEvent::Failed(error)));
+        {
+            let mut event = core::pin::pin!(wifi.controller.next_event());
+            assert_eq!(poll(event.as_mut()), Poll::Ready(WifiEvent::Failed(error)));
+        }
+        assert_eq!(
+            wifi.controller.event_diagnostics(),
+            EventDiagnostics {
+                capacity: 2,
+                accepted: 1,
+                consumed: 1,
+                pending: 0,
+                high_water: 1,
+                dropped: 0,
+            }
+        );
     }
 
     #[test]
