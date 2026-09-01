@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.24] - 2026-09-01
+
 ### Added
 
+- Add Wi-Fi event accepted/consumed counters so zero-drop HIL can prove
+  `accepted = consumed + pending` instead of inferring conservation from queue
+  occupancy alone.
 - Add allocation-free typed GATT and SSAP database definitions with validated
   UUIDs, permissions, properties, bounded values, and opaque handles.
 - Add a separately owned bounded unsolicited-event transport with async wake
